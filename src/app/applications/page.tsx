@@ -11,6 +11,7 @@ interface FormItem {
   formNo: string;
   dept: string;
   size: string;
+  pdfUrl: string;
 }
 
 export default function ApplicationsPage() {
@@ -21,6 +22,7 @@ export default function ApplicationsPage() {
       formNo: "Form TMC-W1",
       dept: "Water Supply Cell",
       size: "245 KB",
+      pdfUrl: "/forms/tmc-w1-water-connection.pdf",
     },
     {
       id: "app-2",
@@ -28,6 +30,7 @@ export default function ApplicationsPage() {
       formNo: "Form TMC-BP4",
       dept: "Town Planning Cell",
       size: "512 KB",
+      pdfUrl: "/forms/tmc-bp4-building-permission.pdf",
     },
     {
       id: "app-3",
@@ -35,6 +38,7 @@ export default function ApplicationsPage() {
       formNo: "Form TMC-TL2",
       dept: "Health & Sanitation Dept",
       size: "180 KB",
+      pdfUrl: "/forms/tmc-tl2-trade-license.pdf",
     },
     {
       id: "app-4",
@@ -42,6 +46,7 @@ export default function ApplicationsPage() {
       formNo: "Form TMC-KT3",
       dept: "Revenue Cell",
       size: "310 KB",
+      pdfUrl: "/forms/tmc-kt3-khata-transfer.pdf",
     },
     {
       id: "app-5",
@@ -49,6 +54,7 @@ export default function ApplicationsPage() {
       formNo: "Form TMC-NOC1",
       dept: "Engineering Section",
       size: "190 KB",
+      pdfUrl: "/forms/tmc-noc1-electricity-borewell.pdf",
     },
     {
       id: "app-6",
@@ -56,6 +62,7 @@ export default function ApplicationsPage() {
       formNo: "Form TMC-PM6",
       dept: "Community Affairs",
       size: "220 KB",
+      pdfUrl: "/forms/tmc-pm6-street-vendor.pdf",
     },
   ];
 
@@ -180,15 +187,17 @@ export default function ApplicationsPage() {
                   Apply Online
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => alert(`Downloading statutory PDF: ${item.title} (${item.formNo})`)}
+                <a
+                  href={item.pdfUrl}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-xs font-semibold text-teal-800 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900 transition"
-                  title="Download Form PDF"
+                  title={`Download ${item.title} (${item.formNo}) PDF`}
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>PDF</span>
-                </button>
+                </a>
               </div>
             </div>
           ))}

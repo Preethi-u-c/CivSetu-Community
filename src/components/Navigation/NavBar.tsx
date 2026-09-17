@@ -1,15 +1,39 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Info, PhoneCall, User, Menu, X } from "lucide-react";
+import { Home, Info, PhoneCall, User, UserPlus, LogOut, Menu, X } from "lucide-react";
 import { useAccessibility } from "@/context/AccessibilityContext";
 
 export const NavBar: React.FC = () => {
   const pathname = usePathname();
   const { t } = useAccessibility();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ fullName: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.authenticated && data.citizen) {
+          setCurrentUser(data.citizen);
+        } else {
+          setCurrentUser(null);
+        }
+      })
+      .catch(() => setCurrentUser(null));
+  }, [pathname]);
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      setCurrentUser(null);
+      window.location.href = "/login";
+    } catch {
+      window.location.href = "/login";
+    }
+  };
 
   const navItems = [
     {
@@ -70,15 +94,45 @@ export const NavBar: React.FC = () => {
           </button>
         </div>
 
-        {/* Right Side: Login Button (Civic Gold Pill) */}
-        <div className="flex items-center">
-          <Link
-            href="/login"
-            className="flex items-center gap-2 bg-[#B98519] hover:bg-[#9E7013] text-white px-5 py-2 rounded-lg text-sm font-bold shadow-sm transition-all hover:shadow"
-          >
-            <User className="w-4 h-4" />
-            <span>{t.nav.login}</span>
-          </Link>
+        {/* Right Side: Authenticated Citizen Dropdown / Logout OR Register & Login */}
+        <div className="flex items-center gap-2.5">
+          {currentUser ? (
+            <div className="flex items-center gap-2">
+              <Link
+                href="/track"
+                className="flex items-center gap-1.5 bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-[#064E4A] dark:text-teal-300 px-3 py-2 rounded-lg text-sm font-bold transition-all"
+                title="View My Applications & Grievances"
+              >
+                <User className="w-4 h-4" />
+                <span className="max-w-[130px] truncate">{currentUser.fullName}</span>
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 border border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 px-3 py-2 rounded-lg text-sm font-semibold transition"
+                title="Sign Out"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              <Link
+                href="/register"
+                className="hidden sm:flex items-center gap-1.5 border border-[#064E4A] dark:border-teal-400 text-[#064E4A] dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/50 px-3.5 py-2 rounded-lg text-sm font-bold transition-all"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>{t.nav.register || "Register"}</span>
+              </Link>
+              <Link
+                href="/login"
+                className="flex items-center gap-2 bg-[#B98519] hover:bg-[#9E7013] text-white px-4 sm:px-5 py-2 rounded-lg text-sm font-bold shadow-sm transition-all hover:shadow"
+              >
+                <User className="w-4 h-4" />
+                <span>{t.nav.login}</span>
+              </Link>
+            </>
+          )}
         </div>
       </div>
 
@@ -103,6 +157,48 @@ export const NavBar: React.FC = () => {
               </Link>
             );
           })}
+
+          {currentUser ? (
+            <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex gap-2">
+              <Link
+                href="/track"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-[#064E4A] dark:text-teal-300 rounded-md text-sm font-bold"
+              >
+                <User className="w-4 h-4" />
+                <span className="truncate">{currentUser.fullName}</span>
+              </Link>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  handleLogout();
+                }}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-red-200 text-red-600 rounded-md text-sm font-bold"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Logout</span>
+              </button>
+            </div>
+          ) : (
+            <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex gap-2">
+              <Link
+                href="/register"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 border border-[#064E4A] dark:border-teal-400 text-[#064E4A] dark:text-teal-300 rounded-md text-sm font-bold"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>{t.nav.register || "Register"}</span>
+              </Link>
+              <Link
+                href="/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#B98519] hover:bg-[#9E7013] text-white rounded-md text-sm font-bold"
+              >
+                <User className="w-4 h-4" />
+                <span>{t.nav.login}</span>
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </nav>

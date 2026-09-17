@@ -3,6 +3,7 @@ export type Language = "en" | "kn";
 export interface TranslationDictionary {
   topBar: {
     login: string;
+    register?: string;
     pigrs: string;
     whatsapp: string;
     skipToMain: string;
@@ -23,6 +24,7 @@ export interface TranslationDictionary {
     aboutUs: string;
     contactUs: string;
     login: string;
+    register?: string;
   };
   officials: {
     heading: string;
@@ -77,6 +79,7 @@ export const translations: Record<Language, TranslationDictionary> = {
   en: {
     topBar: {
       login: "Login",
+      register: "Register",
       pigrs: "PIGRS number : 1902",
       whatsapp: "Whatsapp No :-",
       skipToMain: "Skip to main content",
@@ -97,6 +100,7 @@ export const translations: Record<Language, TranslationDictionary> = {
       aboutUs: "About Us",
       contactUs: "Contact Us",
       login: "Login",
+      register: "Register",
     },
     officials: {
       heading: "Key Dignitaries & Officials",
@@ -149,6 +153,7 @@ export const translations: Record<Language, TranslationDictionary> = {
   kn: {
     topBar: {
       login: "ಪ್ರವೇಶ (Login)",
+      register: "ನೋಂದಣಿ (Register)",
       pigrs: "ಪಿ.ಐ.ಜಿ.ಆರ್.ಎಸ್ ಸಂಖ್ಯೆ : 1902",
       whatsapp: "ವಾಟ್ಸಾಪ್ ಸಂಖ್ಯೆ :-",
       skipToMain: "ಮುಖ್ಯ ವಿಷಯಕ್ಕೆ ಹೋಗಿ",
@@ -169,6 +174,7 @@ export const translations: Record<Language, TranslationDictionary> = {
       aboutUs: "ನಮ್ಮ ಬಗ್ಗೆ",
       contactUs: "ಸಂಪರ್ಕಿಸಿ",
       login: "ಲಾಗಿನ್",
+      register: "ನೋಂದಣಿ",
     },
     officials: {
       heading: "ಪ್ರಮುಖ ಗಣ್ಯರು ಮತ್ತು ಅಧಿಕಾರಿಗಳು",

@@ -1,113 +1,125 @@
 export interface WardInfo {
   wardNumber: number;
   name: string;
-  nameKn: string;
-  representative: string;
-  contact: string;
   population: number;
-  color: string;
-  landmarks: string[];
+  nameKn?: string;
+  representative?: string;
 }
 
 export const wardsData: WardInfo[] = [
   {
     wardNumber: 1,
-    name: "Ward 1 - Someshwara Temple Area",
-    nameKn: "ವಾರ್ಡ್ ೧ - ಸೋಮೇಶ್ವರ ದೇವಸ್ಥಾನ ಪ್ರದೇಶ",
-    representative: "Smt. Shanta Patil",
-    contact: "08382-272077",
-    population: 2340,
-    color: "#FDE68A", // Soft Yellow
-    landmarks: ["Someshwara Temple", "Kalyani Pond"],
+    name: "Lakshmeshwar Ward No. 1",
+    population: 1993,
   },
   {
     wardNumber: 2,
-    name: "Ward 2 - Market Road",
-    nameKn: "ವಾರ್ಡ್ ೨ - ಮಾರುಕಟ್ಟೆ ರಸ್ತೆ",
-    representative: "Shri. Ramesh Badiger",
-    contact: "08382-272077",
-    population: 2610,
-    color: "#FED7AA", // Peach
-    landmarks: ["APMC Market", "Gandhi Chowk"],
+    name: "Lakshmeshwar Ward No. 2",
+    population: 1752,
   },
   {
     wardNumber: 3,
-    name: "Ward 3 - Fort & Jain Basti",
-    nameKn: "ವಾರ್ಡ್ ೩ - ಕೋಟೆ ಮತ್ತು ಜೈನ ಬಸದಿ",
-    representative: "Shri. Anand Hosamani",
-    contact: "08382-272077",
-    population: 2150,
-    color: "#FBCFE8", // Soft Pink
-    landmarks: ["Shanka Basadi", "Historical Fort Wall"],
+    name: "Lakshmeshwar Ward No. 3",
+    population: 1108,
+  },
+  {
+    wardNumber: 4,
+    name: "Lakshmeshwar Ward No. 4",
+    population: 1208,
+  },
+  {
+    wardNumber: 5,
+    name: "Lakshmeshwar Ward No. 5",
+    population: 1309,
+  },
+  {
+    wardNumber: 6,
+    name: "Lakshmeshwar Ward No. 6",
+    population: 1242,
   },
   {
     wardNumber: 7,
-    name: "Ward 7 - Bus Stand Area",
-    nameKn: "ವಾರ್ಡ್ ೭ - ಬಸ್ ನಿಲ್ದಾಣ ಪ್ರದೇಶ",
-    representative: "Smt. Geeta Kulkarni",
-    contact: "08382-272077",
-    population: 2890,
-    color: "#BAE6FD", // Light Sky Blue
-    landmarks: ["KSRTC Bus Stand", "Town Library"],
+    name: "Lakshmeshwar Ward No. 7",
+    population: 1084,
   },
   {
     wardNumber: 8,
-    name: "Ward 8 - Purasabe Colony",
-    nameKn: "ವಾರ್ಡ್ ೮ - ಪುರಸಭೆ ಬಡಾವಣೆ",
-    representative: "Shri. Manjunath Gadag",
-    contact: "08382-272077",
-    population: 1980,
-    color: "#BBF7D0", // Light Green
-    landmarks: ["Purasabe Office", "Taluk Hospital"],
+    name: "Lakshmeshwar Ward No. 8",
+    population: 1551,
   },
   {
     wardNumber: 9,
-    name: "Ward 9 - Shigli Road",
-    nameKn: "ವಾರ್ಡ್ ೯ - ಶಿಗಲಿ ರಸ್ತೆ",
-    representative: "Smt. Renuka Angadi",
-    contact: "08382-272077",
-    population: 2450,
-    color: "#DDD6FE", // Lavender
-    landmarks: ["Government Junior College", "Water Filtration Unit"],
+    name: "Lakshmeshwar Ward No. 9",
+    population: 1412,
+  },
+  {
+    wardNumber: 10,
+    name: "Lakshmeshwar Ward No. 10",
+    population: 1347,
+  },
+  {
+    wardNumber: 11,
+    name: "Lakshmeshwar Ward No. 11",
+    population: 1413,
   },
   {
     wardNumber: 12,
-    name: "Ward 12 - Vidya Nagar",
-    nameKn: "ವಾರ್ಡ್ ೧೨ - ವಿದ್ಯಾನಗರ",
-    representative: "Shri. Basavaraj Bellad",
-    contact: "08382-272077",
-    population: 2200,
-    color: "#FDE68A",
-    landmarks: ["Public Park", "Polytechnic College"],
+    name: "Lakshmeshwar Ward No. 12",
+    population: 1284,
   },
   {
     wardNumber: 13,
-    name: "Ward 13 - Station Road",
-    nameKn: "ವಾರ್ಡ್ ೧೩ - ಸ್ಟೇಷನ್ ರಸ್ತೆ",
-    representative: "Shri. Suresh Hubli",
-    contact: "08382-272077",
-    population: 2780,
-    color: "#FECDD3", // Soft Rose
-    landmarks: ["Commercial Complex", "Community Hall"],
+    name: "Lakshmeshwar Ward No. 13",
+    population: 1176,
   },
   {
     wardNumber: 14,
-    name: "Ward 14 - Industrial Area",
-    nameKn: "ವಾರ್ಡ್ ೧೪ - ಕೈಗಾರಿಕಾ ಪ್ರದೇಶ",
-    representative: "Smt. Pushpa Doddagoudar",
-    contact: "08382-272077",
-    population: 1890,
-    color: "#FEF08A",
-    landmarks: ["Gin Factory Road", "Sub-Station"],
+    name: "Lakshmeshwar Ward No. 14",
+    population: 1754,
+  },
+  {
+    wardNumber: 15,
+    name: "Lakshmeshwar Ward No. 15",
+    population: 1106,
+  },
+  {
+    wardNumber: 16,
+    name: "Lakshmeshwar Ward No. 16",
+    population: 3531,
+  },
+  {
+    wardNumber: 17,
+    name: "Lakshmeshwar Ward No. 17",
+    population: 1661,
   },
   {
     wardNumber: 18,
-    name: "Ward 18 - Magadi Extension",
-    nameKn: "ವಾರ್ಡ್ ೧೮ - ಮಾಗಡಿ ಬಡಾವಣೆ",
-    representative: "Shri. Chandrashekhar Hiremath",
-    contact: "08382-272077",
-    population: 2110,
-    color: "#A7F3D0",
-    landmarks: ["Veterinary Clinic", "Primary Health Center"],
+    name: "Lakshmeshwar Ward No. 18",
+    population: 1451,
+  },
+  {
+    wardNumber: 19,
+    name: "Lakshmeshwar Ward No. 19",
+    population: 1871,
+  },
+  {
+    wardNumber: 20,
+    name: "Lakshmeshwar Ward No. 20",
+    population: 746,
+  },
+  {
+    wardNumber: 21,
+    name: "Lakshmeshwar Ward No. 21",
+    population: 1453,
+  },
+  {
+    wardNumber: 22,
+    name: "Lakshmeshwar Ward No. 22",
+    population: 3065,
+  },
+  {
+    wardNumber: 23,
+    name: "Lakshmeshwar Ward No. 23",
+    population: 2237,
   },
 ];

@@ -23,14 +23,14 @@ export const quickServices: QuickService[] = [
     textColor: "text-white",
   },
   {
-    id: "citizen-services",
-    title: "Citizen Services",
-    titleKn: "ನಾಗರಿಕ ಸೇವೆಗಳು",
-    description: "Water supply, property tax (Khata/Sasya), trade licenses, sanitation, and streetlights.",
-    descriptionKn: "ಕುಡಿಯುವ ನೀರು, ಆಸ್ತಿ ತೆರಿಗೆ (ಖಾತಾ), ವ್ಯಾಪಾರ ಪರವಾನಗಿ, ನೈರ್ಮಲ್ಯ ಮತ್ತು ಬೀದಿದೀಪ ಸೇವೆಗಳು.",
-    href: "/citizen-services",
+    id: "wards",
+    title: "Know Your Wards",
+    titleKn: "ನಿಮ್ಮ ವಾರ್ಡ್‌ಗಳನ್ನು ತಿಳಿಯಿರಿ",
+    description: "Explore the 23 administrative wards of Lakshmeshwar Town Municipal Council and their available population and geographic information.",
+    descriptionKn: "ಲಕ್ಷ್ಮೇಶ್ವರ ಪಟ್ಟಣ ಪುರಸಭೆಯ 23 ಆಡಳಿತಾತ್ಮಕ ವಾರ್ಡ್‌ಗಳು ಮತ್ತು ಲಭ್ಯವಿರುವ ಜನಸಂಖ್ಯೆ ಹಾಗೂ ಭೌಗೋಳಿಕ ಮಾಹಿತಿಯನ್ನು ತಿಳಿಯಿರಿ.",
+    href: "/wards",
     iconName: "UserCheck",
-    bgColor: "bg-[#4D7C0F]", // Olive Green
+    bgColor: "bg-[#4D7C0F]",
     textColor: "text-white",
   },
   {

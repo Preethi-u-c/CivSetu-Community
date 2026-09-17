@@ -12,6 +12,8 @@ export default function SitemapPage() {
         { label: "About Us", href: "/about" },
         { label: "Contact Us", href: "/contact" },
         { label: "Login / Authentication", href: "/login" },
+        { label: "Citizen Registration", href: "/register" },
+        { label: "Forgot Password / Reset", href: "/forgot-password" },
       ],
     },
     {

@@ -15,13 +15,19 @@ export const HeroCarousel: React.FC = () => {
   }, []);
 
   const prevSlide = useCallback(() => {
-    setCurrentIndex((prev) => (prev - 1 + heroSlides.length) % heroSlides.length);
+    setCurrentIndex(
+      (prev) => (prev - 1 + heroSlides.length) % heroSlides.length
+    );
   }, []);
 
-  // Autoplay
+  // Auto play
   useEffect(() => {
     if (isPaused) return;
-    const interval = setInterval(nextSlide, 5000);
+
+    const interval = setInterval(() => {
+      nextSlide();
+    }, 5000);
+
     return () => clearInterval(interval);
   }, [isPaused, nextSlide]);
 
@@ -29,24 +35,30 @@ export const HeroCarousel: React.FC = () => {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowLeft") {
       prevSlide();
-    } else if (e.key === "ArrowRight") {
+    }
+
+    if (e.key === "ArrowRight") {
       nextSlide();
     }
   };
 
-  // Touch Swipe
+  // Touch swipe
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return;
-    const diffX = touchStartX.current - e.changedTouches[0].clientX;
+
+    const diffX =
+      touchStartX.current - e.changedTouches[0].clientX;
+
     if (diffX > 50) {
       nextSlide();
     } else if (diffX < -50) {
       prevSlide();
     }
+
     touchStartX.current = null;
   };
 
@@ -61,64 +73,69 @@ export const HeroCarousel: React.FC = () => {
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
+      {/* Carousel */}
       <div
         className="relative overflow-hidden rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 bg-gray-900"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        {/* Desktop View: Panoramic 4-image grid strictly matching reference */}
-        <div className="hidden lg:grid grid-cols-4 divide-x divide-white/20">
-          {heroSlides.map((slide, idx) => (
-            <HeroSlideCard key={slide.id} slide={slide} index={idx} />
-          ))}
-        </div>
+        {/* Current Image */}
+        <HeroSlideCard
+          slide={heroSlides[currentIndex]}
+          index={currentIndex}
+        />
 
-        {/* Mobile & Tablet Slider View */}
-        <div className="lg:hidden relative h-[280px] sm:h-[350px]">
-          {heroSlides.map((slide, idx) => (
-            <div
-              key={slide.id}
-              className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
-                idx === currentIndex ? "opacity-100 z-10" : "opacity-0 z-0 pointer-events-none"
-              }`}
-            >
-              <HeroSlideCard slide={slide} index={idx} />
-            </div>
-          ))}
-        </div>
-
-        {/* Previous Button (White circular button matching screenshot) */}
+        {/* Previous Button */}
         <button
+          type="button"
           onClick={prevSlide}
-          className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/90 hover:bg-white text-gray-800 shadow-md flex items-center justify-center transition-transform hover:scale-105"
+          className="absolute left-3 top-1/2 -translate-y-1/2 z-20
+                     w-9 h-9 sm:w-10 sm:h-10
+                     rounded-full
+                     bg-white/90 hover:bg-white
+                     text-gray-800
+                     shadow-md
+                     flex items-center justify-center
+                     transition-transform hover:scale-105"
           aria-label="Previous image"
-          title="Previous slide"
+          title="Previous image"
         >
           <ChevronLeft className="w-6 h-6 stroke-[2.5]" />
         </button>
 
-        {/* Next Button (White circular button matching screenshot) */}
+        {/* Next Button */}
         <button
+          type="button"
           onClick={nextSlide}
-          className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/90 hover:bg-white text-gray-800 shadow-md flex items-center justify-center transition-transform hover:scale-105"
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-20
+                     w-9 h-9 sm:w-10 sm:h-10
+                     rounded-full
+                     bg-white/90 hover:bg-white
+                     text-gray-800
+                     shadow-md
+                     flex items-center justify-center
+                     transition-transform hover:scale-105"
           aria-label="Next image"
-          title="Next slide"
+          title="Next image"
         >
           <ChevronRight className="w-6 h-6 stroke-[2.5]" />
         </button>
       </div>
 
-      {/* Pagination Dots (First dot gold, others gray, exactly matching reference) */}
-      <div className="flex justify-center items-center gap-2 mt-3" role="tablist">
-        {heroSlides.map((_, idx) => (
+      {/* Dots */}
+      <div
+        className="flex justify-center items-center gap-2 mt-3"
+        role="tablist"
+      >
+        {heroSlides.map((slide, idx) => (
           <button
-            key={idx}
+            key={slide.id}
+            type="button"
             onClick={() => setCurrentIndex(idx)}
-            className={`transition-all duration-300 rounded-full ${
-              idx === currentIndex
-                ? "w-3 h-3 bg-[#B98519]"
-                : "w-2.5 h-2.5 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400"
-            }`}
+            className={`rounded-full transition-all duration-300 ${idx === currentIndex
+              ? "w-3 h-3 bg-[#B98519]"
+              : "w-2.5 h-2.5 bg-gray-300 dark:bg-gray-700 hover:bg-gray-400"
+              }`}
             aria-label={`Go to slide ${idx + 1}`}
             role="tab"
             aria-selected={idx === currentIndex}

@@ -3,117 +3,276 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { PageContainer } from "@/components/UI/PageContainer";
-import { User, Lock, Shield, ArrowRight } from "lucide-react";
+import {
+  User,
+  Lock,
+  Eye,
+  EyeOff,
+  Shield,
+  ArrowRight,
+  AlertCircle,
+  CheckCircle2,
+} from "lucide-react";
 
 export default function LoginPage() {
-  const [role, setRole] = useState<"citizen" | "official">("citizen");
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+
+  // Validation & UI State
+  const [errors, setErrors] = useState<{ identifier?: string; password?: string }>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittedInfo, setSubmittedInfo] = useState<string | null>(null);
+
+  // Validation helpers
+  const isValidMobile = (val: string) => /^[6-9]\d{9}$/.test(val.replace(/\s+/g, ""));
+  const isValidEmail = (val: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const newErrors: { identifier?: string; password?: string } = {};
+
+    const trimmedIdentifier = identifier.trim();
+
+    // 1. Validate Mobile Number or Email
+    if (!trimmedIdentifier) {
+      newErrors.identifier = "Please enter your registered mobile number or email address.";
+    } else {
+      const isMobile = isValidMobile(trimmedIdentifier);
+      const isEmail = isValidEmail(trimmedIdentifier);
+
+      if (!isMobile && !isEmail) {
+        newErrors.identifier =
+          "Please enter a valid 10-digit Indian mobile number or a valid email address.";
+      }
+    }
+
+    // 2. Validate Password
+    if (!password) {
+      newErrors.password = "Password is required.";
+    } else if (password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters.";
+    }
+
+    setErrors(newErrors);
+
+    if (Object.keys(newErrors).length > 0) {
+      setSubmittedInfo(null);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmittedInfo(null);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: trimmedIdentifier, password }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setErrors({ identifier: data.error || "Authentication failed. Please verify credentials." });
+        return;
+      }
+
+      setSubmittedInfo("Authentication successful! Welcome to CivSetu citizen services.");
+      window.location.href = "/track";
+    } catch {
+      setErrors({
+        identifier: "Network error communicating with authentication server. Please try again.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <PageContainer
-      title="CivSetu Portal Authentication"
-      subtitle="Secure sign-in for Citizens, Municipal Staff, and Lakshmeshwar TMC Administrators"
-      breadcrumbs={[{ label: "Login" }]}
+      title="Citizen Login"
+      subtitle="Sign in to your CivSetu account to track grievances, view municipal applications, and manage civic services"
+      breadcrumbs={[{ label: "Citizen Login" }]}
     >
-      <div className="max-w-md mx-auto py-4">
-        {/* Role Selector Tabs */}
-        <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6">
-          <button
-            onClick={() => setRole("citizen")}
-            className={`flex-1 pb-3 text-sm font-bold text-center border-b-2 transition ${
-              role === "citizen"
-                ? "border-[#064E4A] text-[#064E4A] dark:text-teal-400 dark:border-teal-400"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Citizen Login
-          </button>
-          <button
-            onClick={() => setRole("official")}
-            className={`flex-1 pb-3 text-sm font-bold text-center border-b-2 transition ${
-              role === "official"
-                ? "border-[#064E4A] text-[#064E4A] dark:text-teal-400 dark:border-teal-400"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Officer / Staff Login
-          </button>
+      <div className="max-w-md mx-auto py-2 sm:py-4">
+        {/* Portal Information Badge */}
+        <div className="mb-6 p-3.5 bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-900 rounded-xl flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-[#064E4A] dark:bg-teal-900/60 flex items-center justify-center flex-shrink-0 text-white dark:text-teal-300">
+            <User className="w-5 h-5" />
+          </div>
+          <div className="text-xs text-[#064E4A] dark:text-teal-200">
+            <p className="font-bold">Citizen Services Gateway</p>
+            <p className="text-gray-600 dark:text-gray-400">
+              Lakshmeshwar Town Municipal Council Citizen Portal
+            </p>
+          </div>
         </div>
 
-        {/* Login Form */}
-        <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+        {/* Informational Verification Message when submitted */}
+        {submittedInfo && (
+          <div
+            role="status"
+            className="mb-5 p-4 rounded-xl bg-teal-50 dark:bg-teal-950/50 border border-teal-300 dark:border-teal-800 text-xs sm:text-sm text-teal-800 dark:text-teal-200 flex items-start gap-2.5"
+          >
+            <CheckCircle2 className="w-5 h-5 text-teal-600 dark:text-teal-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">Client Validation Successful</p>
+              <p className="mt-0.5 text-gray-700 dark:text-gray-300">{submittedInfo}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Citizen Login Form */}
+        <form onSubmit={handleLoginSubmit} noValidate className="space-y-4">
+          {/* 1. Mobile Number or Email */}
           <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-              {role === "citizen" ? "Registered Mobile Number" : "Employee / KGID Number"}
+            <label
+              htmlFor="identifier"
+              className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5"
+            >
+              Mobile Number or Email <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <User className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
               <input
-                type={role === "citizen" ? "tel" : "text"}
-                placeholder={role === "citizen" ? "Enter 10-digit mobile number" : "Enter KGID or Official ID"}
-                className="w-full pl-9 pr-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:border-teal-600 text-sm"
+                id="identifier"
+                type="text"
+                value={identifier}
+                onChange={(e) => {
+                  setIdentifier(e.target.value);
+                  if (errors.identifier) {
+                    setErrors((prev) => ({ ...prev, identifier: undefined }));
+                  }
+                  if (submittedInfo) setSubmittedInfo(null);
+                }}
+                placeholder="10-digit mobile number OR email address"
+                className={`w-full pl-9 pr-3 py-2.5 border rounded-lg dark:bg-gray-800/80 focus:outline-none text-sm transition ${
+                  errors.identifier
+                    ? "border-red-500 focus:border-red-500 ring-1 ring-red-500"
+                    : "border-gray-300 dark:border-gray-700 focus:border-[#064E4A] dark:focus:border-teal-400"
+                }`}
+                aria-invalid={!!errors.identifier}
+                aria-describedby={errors.identifier ? "identifier-error" : undefined}
                 required
               />
             </div>
+            {errors.identifier && (
+              <p id="identifier-error" className="text-xs text-red-600 dark:text-red-400 mt-1">
+                {errors.identifier}
+              </p>
+            )}
           </div>
 
+          {/* 2. Password */}
           <div>
-            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1">
-              {role === "citizen" ? "OTP or Password" : "Secure Password"}
+            <label
+              htmlFor="password"
+              className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5"
+            >
+              Password <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
               <input
-                type="password"
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (errors.password) {
+                    setErrors((prev) => ({ ...prev, password: undefined }));
+                  }
+                  if (submittedInfo) setSubmittedInfo(null);
+                }}
                 placeholder="••••••••"
-                className="w-full pl-9 pr-3 py-2 border rounded-md dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:border-teal-600 text-sm"
+                className={`w-full pl-9 pr-10 py-2.5 border rounded-lg dark:bg-gray-800/80 focus:outline-none text-sm transition ${
+                  errors.password
+                    ? "border-red-500 focus:border-red-500 ring-1 ring-red-500"
+                    : "border-gray-300 dark:border-gray-700 focus:border-[#064E4A] dark:focus:border-teal-400"
+                }`}
+                aria-invalid={!!errors.password}
+                aria-describedby={errors.password ? "password-error" : undefined}
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            {errors.password && (
+              <p id="password-error" className="text-xs text-red-600 dark:text-red-400 mt-1">
+                {errors.password}
+              </p>
+            )}
+
+            {/* 3. Forgot Password? Link DIRECTLY BELOW Password input, aligned right */}
+            <div className="flex justify-end mt-1.5">
+              <Link
+                href="/forgot-password"
+                className="text-xs font-semibold text-[#064E4A] dark:text-teal-400 hover:underline hover:text-[#0B6B63] transition"
+              >
+                Forgot Password?
+              </Link>
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" className="rounded" />
-              <span>Remember this session</span>
+          {/* Optional Remember Me */}
+          <div className="flex items-center text-xs text-gray-600 dark:text-gray-400">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="rounded border-gray-300 dark:border-gray-700 text-[#064E4A] focus:ring-[#064E4A]"
+              />
+              <span>Remember this device</span>
             </label>
-            <a href="#" className="text-[#064E4A] dark:text-teal-400 hover:underline">
-              Forgot credentials?
-            </a>
           </div>
 
-          {role === "official" ? (
-            <Link
-              href="/admin"
-              className="w-full flex items-center justify-center gap-2 bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold py-2.5 rounded-md transition shadow text-center"
+          {/* 4. Login Button */}
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold py-3 rounded-lg transition shadow hover:shadow-md text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <span>Access Municipal Administration Portal</span>
+              <span>{isSubmitting ? "Authenticating..." : "Login"}</span>
               <ArrowRight className="w-4 h-4" />
-            </Link>
-          ) : (
-            <Link
-              href="/track"
-              className="w-full flex items-center justify-center gap-2 bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold py-2.5 rounded-md transition shadow text-center"
-            >
-              <span>Proceed to Citizen Tracking Portal</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          )}
+            </button>
+          </div>
+
+          {/* Bottom: Don't have an account? Register */}
+          <div className="text-center pt-4 border-t border-gray-200 dark:border-gray-800">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Don&apos;t have an account?{" "}
+              <Link
+                href="/register"
+                className="font-bold text-[#064E4A] dark:text-teal-400 hover:underline"
+              >
+                Register
+              </Link>
+            </p>
+          </div>
         </form>
 
-        <div className="mt-6 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded text-xs text-amber-800 dark:text-amber-300 text-center flex flex-col items-center justify-center gap-1.5">
-          <div className="flex items-center gap-1.5 font-bold">
-            <Shield className="w-4 h-4 flex-shrink-0" />
-            <span>Phase 2 Operating Mode</span>
+        {/* Municipal Staff / Official Access Notice */}
+        <div className="mt-8 p-3.5 bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl text-xs text-gray-600 dark:text-gray-400 text-center space-y-1.5">
+          <div className="flex items-center justify-center gap-1.5 font-bold text-gray-700 dark:text-gray-300">
+            <Shield className="w-4 h-4 text-[#B98519]" />
+            <span>Are you a Municipal Officer or TMC Staff?</span>
           </div>
-          <p className="text-[11px] text-amber-700 dark:text-amber-400">
-            Citizen registration and credential verification will be activated in Phase 3. Municipal staff
-            can access all administrative desks via the direct management portal.
+          <p className="text-[11px]">
+            Municipal employees and ward administrators can access the internal management desk.
           </p>
           <Link
             href="/admin"
-            className="mt-1 font-bold underline hover:text-amber-950 dark:hover:text-amber-200"
+            className="inline-block mt-1 font-bold text-[#064E4A] dark:text-teal-300 underline hover:text-[#0B6B63]"
           >
-            Launch Officer Administrative Desks →
+            Access Officer Administrative Desk →
           </Link>
         </div>
       </div>

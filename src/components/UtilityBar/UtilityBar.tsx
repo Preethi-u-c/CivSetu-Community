@@ -32,6 +32,13 @@ export const UtilityBar: React.FC = () => {
           >
             {t.topBar.login}
           </Link>
+          <span className="text-gray-500">/</span>
+          <Link
+            href="/register"
+            className="hover:text-amber-400 font-medium transition-colors"
+          >
+            {t.topBar.register || "Register"}
+          </Link>
           <span className="text-gray-500">|</span>
 
           <a
