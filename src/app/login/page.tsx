@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageContainer } from "@/components/UI/PageContainer";
 import {
@@ -12,6 +12,7 @@ import {
   ArrowRight,
   AlertCircle,
   CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 
 export default function LoginPage() {
@@ -22,8 +23,22 @@ export default function LoginPage() {
 
   // Validation & UI State
   const [errors, setErrors] = useState<{ identifier?: string; password?: string }>({});
+  const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedInfo, setSubmittedInfo] = useState<string | null>(null);
+
+  // Restore remembered identifier on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("civsetu_remember_identifier");
+      if (saved) {
+        setIdentifier(saved);
+        setRememberMe(true);
+      }
+    } catch {
+      // Local storage unavailable
+    }
+  }, []);
 
   // Validation helpers
   const isValidMobile = (val: string) => /^[6-9]\d{9}$/.test(val.replace(/\s+/g, ""));
@@ -31,6 +46,9 @@ export default function LoginPage() {
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
+    setFormError(null);
     const newErrors: { identifier?: string; password?: string } = {};
 
     const trimmedIdentifier = identifier.trim();
@@ -73,16 +91,26 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        setErrors({ identifier: data.error || "Authentication failed. Please verify credentials." });
+        setFormError(data.error || "Authentication failed. Please verify credentials.");
         return;
       }
 
+      // Handle remember me preference
+      try {
+        if (rememberMe) {
+          localStorage.setItem("civsetu_remember_identifier", trimmedIdentifier);
+        } else {
+          localStorage.removeItem("civsetu_remember_identifier");
+        }
+      } catch {
+        // ignore storage errors
+      }
+
       setSubmittedInfo("Authentication successful! Welcome to CivSetu citizen services.");
-      window.location.href = "/track";
+      // Navigate to Citizen Portal Dashboard
+      window.location.href = "/dashboard";
     } catch {
-      setErrors({
-        identifier: "Network error communicating with authentication server. Please try again.",
-      });
+      setFormError("Network error communicating with authentication server. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -118,6 +146,20 @@ export default function LoginPage() {
             <div>
               <p className="font-bold">Client Validation Successful</p>
               <p className="mt-0.5 text-gray-700 dark:text-gray-300">{submittedInfo}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Server Error Alert Banner */}
+        {formError && (
+          <div
+            role="alert"
+            className="mb-5 p-4 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-xs sm:text-sm text-red-700 dark:text-red-300 flex items-start gap-3"
+          >
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-bold">Login Failed</p>
+              <p className="mt-0.5">{formError}</p>
             </div>
           </div>
         )}
@@ -240,8 +282,17 @@ export default function LoginPage() {
               disabled={isSubmitting}
               className="w-full bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold py-3 rounded-lg transition shadow hover:shadow-md text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <span>{isSubmitting ? "Authenticating..." : "Login"}</span>
-              <ArrowRight className="w-4 h-4" />
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Authenticating...</span>
+                </>
+              ) : (
+                <>
+                  <span>Login</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </div>
 

@@ -14,6 +14,7 @@ import {
   ArrowRight,
   ArrowLeft,
   ShieldAlert,
+  RefreshCw,
 } from "lucide-react";
 
 export default function ForgotPasswordPage() {
@@ -21,6 +22,7 @@ export default function ForgotPasswordPage() {
 
   // Form states
   const [identifier, setIdentifier] = useState("");
+  const [maskedTarget, setMaskedTarget] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -34,6 +36,7 @@ export default function ForgotPasswordPage() {
   const [passwordErrors, setPasswordErrors] = useState<{
     newPassword?: string;
     confirmNewPassword?: string;
+    general?: string;
   }>({});
 
   // Helper validation
@@ -43,6 +46,7 @@ export default function ForgotPasswordPage() {
   // Step 1: Send OTP via Backend
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setIdentifierError(null);
 
     const trimmed = identifier.trim();
@@ -70,6 +74,7 @@ export default function ForgotPasswordPage() {
         return;
       }
 
+      setMaskedTarget(data.mobileMasked || null);
       setStep(2);
     } catch {
       setIdentifierError("Network error occurred while connecting to the recovery service.");
@@ -81,6 +86,7 @@ export default function ForgotPasswordPage() {
   // Step 2: Verify OTP via Backend
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setOtpError(null);
 
     const trimmedOtp = otp.trim();
@@ -123,7 +129,8 @@ export default function ForgotPasswordPage() {
   // Step 3: Reset Password via Backend
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    const errs: { newPassword?: string; confirmNewPassword?: string } = {};
+    if (isSubmitting) return;
+    const errs: { newPassword?: string; confirmNewPassword?: string; general?: string } = {};
 
     if (!newPassword) {
       errs.newPassword = "New password is required.";
@@ -158,14 +165,14 @@ export default function ForgotPasswordPage() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        setPasswordErrors({ newPassword: data.error || "Password reset failed." });
+        setPasswordErrors({ general: data.error || "Password reset failed. Please try again." });
         return;
       }
 
       setStep(4);
     } catch {
       setPasswordErrors({
-        newPassword: "Network error occurred while communicating with the reset service.",
+        general: "Network error occurred while communicating with the reset service.",
       });
     } finally {
       setIsSubmitting(false);
@@ -248,10 +255,20 @@ export default function ForgotPasswordPage() {
 
             <button
               type="submit"
-              className="w-full bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold py-3 rounded-lg transition shadow hover:shadow-md text-sm flex items-center justify-center gap-2"
+              disabled={isSubmitting}
+              className="w-full bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold py-3 rounded-lg transition shadow hover:shadow-md text-sm flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <span>Send OTP</span>
-              <ArrowRight className="w-4 h-4" />
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Sending OTP...</span>
+                </>
+              ) : (
+                <>
+                  <span>Send OTP</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
         )}
@@ -266,7 +283,9 @@ export default function ForgotPasswordPage() {
               </p>
               <p className="mt-1 text-gray-600 dark:text-gray-300">
                 A verification code has been dispatched to{" "}
-                <span className="font-bold text-gray-800 dark:text-gray-100">{identifier}</span>.
+                <span className="font-bold text-gray-800 dark:text-gray-100">
+                  {maskedTarget || identifier}
+                </span>.
               </p>
             </div>
 
@@ -310,17 +329,28 @@ export default function ForgotPasswordPage() {
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="px-4 py-2.5 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-100 dark:hover:bg-gray-800 transition flex items-center gap-1.5"
+                disabled={isSubmitting}
+                className="px-4 py-2.5 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-100 dark:hover:bg-gray-800 transition flex items-center gap-1.5 disabled:opacity-50"
               >
                 <ArrowLeft className="w-4 h-4" />
                 <span>Back</span>
               </button>
               <button
                 type="submit"
-                className="flex-1 bg-[#B98519] hover:bg-[#9E7013] text-white font-bold py-2.5 rounded-lg transition shadow hover:shadow-md text-sm flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+                className="flex-1 bg-[#B98519] hover:bg-[#9E7013] text-white font-bold py-2.5 rounded-lg transition shadow hover:shadow-md text-sm flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <span>Verify OTP</span>
-                <ArrowRight className="w-4 h-4" />
+                {isSubmitting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Verifying...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Verify OTP</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -429,12 +459,35 @@ export default function ForgotPasswordPage() {
               )}
             </div>
 
+            {passwordErrors.general && (
+              <div
+                role="alert"
+                className="p-3.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs sm:text-sm flex items-start gap-2.5"
+              >
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold block">Reset Failed</span>
+                  <p className="mt-0.5">{passwordErrors.general}</p>
+                </div>
+              </div>
+            )}
+
             <button
               type="submit"
-              className="w-full bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold py-3 rounded-lg transition shadow hover:shadow-md text-sm flex items-center justify-center gap-2"
+              disabled={isSubmitting}
+              className="w-full bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold py-3 rounded-lg transition shadow hover:shadow-md text-sm flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <span>Reset Password</span>
-              <ArrowRight className="w-4 h-4" />
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Updating Password...</span>
+                </>
+              ) : (
+                <>
+                  <span>Reset Password</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
         )}

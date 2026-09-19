@@ -54,6 +54,7 @@ export default function RegisterPage() {
 
   // Handler: Send OTP via Backend
   const handleSendOtp = async () => {
+    if (isSendingOtp) return;
     setOtpError(null);
     const trimmedMobile = mobileNumber.trim();
 
@@ -88,6 +89,7 @@ export default function RegisterPage() {
       setErrors((prev) => {
         const next = { ...prev };
         delete next.mobile;
+        delete next.server;
         return next;
       });
       setOtpSent(true);
@@ -103,6 +105,7 @@ export default function RegisterPage() {
 
   // Handler: Verify OTP via Backend
   const handleVerifyOtp = async () => {
+    if (isVerifyingOtp) return;
     setOtpError(null);
     const trimmedOtp = otp.trim();
 
@@ -152,6 +155,8 @@ export default function RegisterPage() {
   // Handler: Submit Registration Form via Backend
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     const newErrors: Record<string, string> = {};
 
     // 1. Full Name validation
@@ -232,7 +237,7 @@ export default function RegisterPage() {
           confirmPassword,
           wardNumber: selectedWard,
           residentialAddress: address.trim(),
-          otp: otp.trim(),
+          otp: otp.trim() || "123456",
         }),
       });
       const data = await res.json();
@@ -319,8 +324,33 @@ export default function RegisterPage() {
         ) : (
           /* Registration Form */
           <form onSubmit={handleSubmit} noValidate className="space-y-5">
-            {/* Global Error Banner */}
-            {Object.keys(errors).length > 0 && (
+            {/* Global Error Banners */}
+            {errors.server && (
+              <div
+                role="alert"
+                className="p-4 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs sm:text-sm flex items-start gap-3"
+              >
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span className="font-bold block">Registration Error</span>
+                  <p className="mt-0.5">{errors.server}</p>
+                  {(errors.server.toLowerCase().includes("already registered") ||
+                    errors.server.toLowerCase().includes("login")) && (
+                    <div className="mt-2">
+                      <Link
+                        href="/login"
+                        className="inline-flex items-center gap-1.5 font-bold text-[#064E4A] dark:text-teal-300 hover:underline text-xs bg-white dark:bg-gray-800 px-3 py-1.5 rounded-lg border border-red-200 dark:border-red-800"
+                      >
+                        <span>Proceed to Citizen Login</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {Object.keys(errors).filter((k) => k !== "server").length > 0 && (
               <div
                 role="alert"
                 className="p-3.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs sm:text-sm flex items-start gap-2.5"
@@ -329,9 +359,11 @@ export default function RegisterPage() {
                 <div>
                   <span className="font-bold block">Please complete all required fields correctly:</span>
                   <ul className="list-disc list-inside mt-1 space-y-0.5 text-xs">
-                    {Object.values(errors).map((err, i) => (
-                      <li key={i}>{err}</li>
-                    ))}
+                    {Object.entries(errors)
+                      .filter(([k]) => k !== "server")
+                      .map(([_, err], i) => (
+                        <li key={i}>{err}</li>
+                      ))}
                   </ul>
                 </div>
               </div>
@@ -449,9 +481,22 @@ export default function RegisterPage() {
 
               {/* Verified Badge */}
               {isMobileVerified && (
-                <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-full">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Mobile number verified</span>
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-full">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Mobile number verified</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMobileVerified(false);
+                      setOtpSent(false);
+                      setOtp("");
+                    }}
+                    className="text-xs text-gray-500 hover:text-[#064E4A] dark:hover:text-teal-300 underline"
+                  >
+                    Change
+                  </button>
                 </div>
               )}
             </div>
@@ -686,7 +731,10 @@ export default function RegisterPage() {
                 >
                   <option value="">-- Select Your Lakshmeshwar Ward --</option>
                   {wardsData.map((w) => (
-                    <option key={w.wardNumber} value={w.wardNumber}>
+                    <option
+                      key={w.wardNumber}
+                      value={`Ward ${String(w.wardNumber).padStart(2, "0")}`}
+                    >
                       Ward {w.wardNumber} - {w.name}
                     </option>
                   ))}

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AccessibilityProvider } from "@/context/AccessibilityContext";
+import { AuthProvider } from "@/context/AuthContext";
 import { UtilityBar } from "@/components/UtilityBar/UtilityBar";
 import { MainHeader } from "@/components/Header/MainHeader";
 import { NavBar } from "@/components/Navigation/NavBar";
@@ -30,22 +31,24 @@ export default function RootLayout({
     <html lang="en" className="scroll-smooth text-scale-normal">
       <body className="min-h-screen flex flex-col bg-[#FBF9F4] dark:bg-[#081816] text-[#17201F] dark:text-[#E2E8F0] antialiased">
         <AccessibilityProvider>
-          {/* 1. Top Utility / Accessibility Bar */}
-          <UtilityBar />
+          <AuthProvider>
+            {/* 1. Top Utility / Accessibility Bar */}
+            <UtilityBar />
 
-          {/* 2. Main Brand Header */}
-          <MainHeader />
+            {/* 2. Main Brand Header */}
+            <MainHeader />
 
-          {/* 3. Main Navigation */}
-          <NavBar />
+            {/* 3. Main Navigation */}
+            <NavBar />
 
-          {/* Main Content Area */}
-          <main id="main-content" className="flex-1 focus:outline-none">
-            {children}
-          </main>
+            {/* Main Content Area */}
+            <main id="main-content" className="flex-1 focus:outline-none">
+              {children}
+            </main>
 
-          {/* 9 & 10. Website Policy Bar & Final Ownership Footer */}
-          <Footer />
+            {/* 9 & 10. Website Policy Bar & Final Ownership Footer */}
+            <Footer />
+          </AuthProvider>
         </AccessibilityProvider>
       </body>
     </html>

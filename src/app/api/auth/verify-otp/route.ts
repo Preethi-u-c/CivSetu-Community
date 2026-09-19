@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isPostgresConfigured } from "@/lib/db/postgres";
+import { citizenDb, isPostgresConfigured } from "@/lib/db/postgres";
 import { otpService } from "@/lib/services/otpService";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,15 @@ export async function POST(req: NextRequest) {
     const cleanOtp = otp.toString().trim();
     const validPurpose = purpose === "password_reset" ? "password_reset" : "registration";
 
-    const result = await otpService.verifyOtp(cleanIdentifier, cleanOtp, validPurpose);
+    let targetIdentifier = cleanIdentifier;
+    if (validPurpose === "password_reset" && rawId.includes("@")) {
+      const citizen = await citizenDb.findByEmail(cleanIdentifier);
+      if (citizen) {
+        targetIdentifier = citizen.mobileNumber;
+      }
+    }
+
+    const result = await otpService.verifyOtp(targetIdentifier, cleanOtp, validPurpose);
     if (!result.success) {
       return NextResponse.json(
         { success: false, error: result.error || "Failed to verify OTP." },
