@@ -1,0 +1,1732 @@
+"use client";
+
+import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { PageContainer } from "@/components/UI/PageContainer";
+import { useAuth } from "@/context/AuthContext";
+import { wardsData } from "@/data/wards";
+import {
+  FileText,
+  AlertCircle,
+  CheckCircle2,
+  MapPin,
+  Camera,
+  Upload,
+  X,
+  Sparkles,
+  RefreshCw,
+  ArrowRight,
+  ArrowLeft,
+  Clock,
+  ShieldCheck,
+  Building,
+  User,
+  Phone,
+  Mail,
+  Copy,
+  Printer,
+  Droplets,
+  Trash2,
+  Lightbulb,
+  Truck,
+  ShieldAlert,
+  Landmark,
+  Trees,
+  Compass,
+  Check,
+} from "lucide-react";
+
+// =============================================================================
+// Complaint Category Definitions & Metadata
+// =============================================================================
+
+interface CategoryItem {
+  id: string;
+  name: string;
+  icon: React.ComponentType<{ className?: string }>;
+  description: string;
+  department: string;
+  examples: string[];
+}
+
+const COMPLAINT_CATEGORIES: CategoryItem[] = [
+  {
+    id: "water",
+    name: "Water Supply & Metering",
+    icon: Droplets,
+    description: "Pipeline leakages, low water pressure, contaminated supply, meter defects",
+    department: "Water Supply & Maintenance Wing, Lakshmeshwar TMC",
+    examples: [
+      "Drinking water pipeline leakage on main road",
+      "Low water pressure during morning municipal supply hours",
+      "Contaminated / muddy water supply received from municipal line",
+      "Damaged public tap / valve leakage outside residential compound",
+    ],
+  },
+  {
+    id: "sanitation",
+    name: "Solid Waste Management & Sanitation",
+    icon: Trash2,
+    description: "Garbage collection, overflowing community bins, open dumping, street sweeping",
+    department: "Health & Solid Waste Management Section, Lakshmeshwar TMC",
+    examples: [
+      "Door-to-door municipal waste collection skipped for consecutive days",
+      "Overflowing community garbage bin requiring urgent clearance",
+      "Illegal waste dumping on vacant municipal site",
+      "Public littering and lack of dustbins near commercial market",
+    ],
+  },
+  {
+    id: "streetlighting",
+    name: "Street Lighting & Electrical",
+    icon: Lightbulb,
+    description: "Defective streetlights, dark stretches, damaged poles, flickering fixtures",
+    department: "Electrical & Streetlighting Wing, Lakshmeshwar TMC",
+    examples: [
+      "Non-functional streetlights creating dark road stretch at night",
+      "Flickering LED streetlight fixture causing visibility hazard",
+      "Damaged electric pole or exposed underground cables",
+      "Request for additional LED streetlight near community junction",
+    ],
+  },
+  {
+    id: "roads",
+    name: "Roads, Footpaths & Drainage",
+    icon: Truck,
+    description: "Potholes, damaged footpaths, clogged stormwater drains, waterlogging",
+    department: "Public Works & Civil Engineering Wing, Lakshmeshwar TMC",
+    examples: [
+      "Deep potholes on municipal road causing traffic hazard",
+      "Clogged stormwater drain causing dirty water overflow onto road",
+      "Broken footpath slabs dangerous for senior citizens and school children",
+      "Severe waterlogging during rainfall due to blocked culvert",
+    ],
+  },
+  {
+    id: "health",
+    name: "Public Health & Mosquito Control",
+    icon: ShieldAlert,
+    description: "Stagnant water, mosquito fogging, stray animal management, food hygiene",
+    department: "Health & Solid Waste Management Section, Lakshmeshwar TMC",
+    examples: [
+      "Stagnant water breeding mosquitoes, urgent fogging requested",
+      "Stray dog nuisance near municipal school and residential lanes",
+      "Unhygienic open butchery waste dumping near public waterway",
+      "Request for sanitation spraying in dengue-prone locality",
+    ],
+  },
+  {
+    id: "revenue",
+    name: "Property Tax & Municipal Revenue",
+    icon: Landmark,
+    description: "Khata assessment issues, property tax receipts, municipal ownership verification",
+    department: "Revenue & Property Assessment Section, Lakshmeshwar TMC",
+    examples: [
+      "Discrepancy in property tax assessment record",
+      "Delayed Form-3 / Sasya Khata extract issuance from revenue wing",
+      "Ownership name correction in municipal assessment register",
+      "Online property tax payment receipt reconciliation error",
+    ],
+  },
+  {
+    id: "parks",
+    name: "Parks, Trees & Civic Amenities",
+    icon: Trees,
+    description: "Overhanging tree branches, park cleanliness, public toilet maintenance",
+    department: "Public Works & Civil Engineering Wing, Lakshmeshwar TMC",
+    examples: [
+      "Overhanging tree branches threatening electrical power lines",
+      "Public toilet facility lacks running water or maintenance",
+      "Damaged playground equipment or benches in municipal park",
+      "Illegal encroachment on public municipal footpath",
+    ],
+  },
+  {
+    id: "other",
+    name: "Other Municipal Grievances",
+    icon: AlertCircle,
+    description: "General civic issues, town planning, or unlisted municipal services",
+    department: "Lakshmeshwar TMC Citizen Facilitation Centre",
+    examples: [
+      "Public civic nuisance requiring municipal council intervention",
+      "Building construction material blocking public right-of-way",
+      "Noise or industrial disturbance in designated residential zone",
+      "General municipal council inquiry or escalation",
+    ],
+  },
+];
+
+type PriorityLevel = "Low" | "Medium" | "High" | "Urgent";
+
+interface PriorityMeta {
+  level: PriorityLevel;
+  label: string;
+  slaHours: number;
+  badgeClass: string;
+  description: string;
+}
+
+const PRIORITIES: PriorityMeta[] = [
+  {
+    level: "Low",
+    label: "Low Priority",
+    slaHours: 120,
+    badgeClass: "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+    description: "Resolution within 5 working days (General civic improvements & non-urgent repairs)",
+  },
+  {
+    level: "Medium",
+    label: "Medium Priority (Standard)",
+    slaHours: 72,
+    badgeClass: "bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300 border-teal-200 dark:border-teal-800",
+    description: "Resolution within 3 working days (Standard municipal maintenance and service tickets)",
+  },
+  {
+    level: "High",
+    label: "High Priority",
+    slaHours: 48,
+    badgeClass: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800",
+    description: "Resolution within 48 hours (Significant service disruption affecting neighborhood)",
+  },
+  {
+    level: "Urgent",
+    label: "Urgent / Emergency",
+    slaHours: 24,
+    badgeClass: "bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 border-red-200 dark:border-red-800",
+    description: "Resolution within 24 hours (Critical public safety hazard or major pipeline burst)",
+  },
+];
+
+export default function NewComplaintPage() {
+  const router = useRouter();
+  const { citizen, loading: authLoading, isAuthenticated } = useAuth();
+
+  // Wizard Step: 1 = Form, 2 = Review, 3 = Confirmation
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+
+  // Form State
+  const [category, setCategory] = useState<string>("");
+  const [priority, setPriority] = useState<PriorityLevel>("Medium");
+  const [title, setTitle] = useState<string>("");
+  const [description, setDescription] = useState<string>("");
+  const [selectedWard, setSelectedWard] = useState<string>("");
+  const [address, setAddress] = useState<string>("");
+
+  // Location / GPS State
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [locationCaptured, setLocationCaptured] = useState<boolean>(false);
+  const [locationStatus, setLocationStatus] = useState<string | null>(null);
+  const [isLocating, setIsLocating] = useState<boolean>(false);
+
+  // Photo Attachment State
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoName, setPhotoName] = useState<string | null>(null);
+  const [photoSize, setPhotoSize] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // AI Assistance Mock Modal / Panel State
+  const [aiAssistantOpen, setAiAssistantOpen] = useState<boolean>(false);
+  const [aiPromptInput, setAiPromptInput] = useState<string>("");
+  const [isAiProcessing, setIsAiProcessing] = useState<boolean>(false);
+  const [aiGeneratedSuggestion, setAiGeneratedSuggestion] = useState<{
+    title: string;
+    description: string;
+  } | null>(null);
+
+  // Validation & Submission State
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submittedComplaint, setSubmittedComplaint] = useState<any>(null);
+
+  // Draft Save & Restore State
+  const [draftSavedTime, setDraftSavedTime] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<boolean>(false);
+
+  // Pre-fill user information once authenticated
+  useEffect(() => {
+    if (citizen) {
+      if (!selectedWard && citizen.wardNumber) {
+        // Match existing ward format if needed
+        setSelectedWard(citizen.wardNumber);
+      }
+      if (!address && citizen.residentialAddress) {
+        setAddress(citizen.residentialAddress);
+      }
+    }
+  }, [citizen]);
+
+  // Check for existing local draft
+  useEffect(() => {
+    try {
+      const savedDraft = localStorage.getItem("civsetu_complaint_draft");
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed.savedAt) {
+          setDraftSavedTime(parsed.savedAt);
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
+  // Save current progress to local draft
+  const handleSaveDraft = () => {
+    try {
+      const draft = {
+        category,
+        priority,
+        title,
+        description,
+        ward: selectedWard,
+        address,
+        latitude,
+        longitude,
+        savedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      };
+      localStorage.setItem("civsetu_complaint_draft", JSON.stringify(draft));
+      setDraftSavedTime(draft.savedAt);
+    } catch {
+      // ignore error
+    }
+  };
+
+  // Restore saved draft
+  const handleRestoreDraft = () => {
+    try {
+      const savedDraft = localStorage.getItem("civsetu_complaint_draft");
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed.category) setCategory(parsed.category);
+        if (parsed.priority) setPriority(parsed.priority);
+        if (parsed.title) setTitle(parsed.title);
+        if (parsed.description) setDescription(parsed.description);
+        if (parsed.ward) setSelectedWard(parsed.ward);
+        if (parsed.address) setAddress(parsed.address);
+        if (parsed.latitude) setLatitude(parsed.latitude);
+        if (parsed.longitude) setLongitude(parsed.longitude);
+        if (parsed.latitude && parsed.longitude) setLocationCaptured(true);
+      }
+    } catch {
+      // ignore error
+    }
+  };
+
+  // Discard saved draft
+  const handleDiscardDraft = () => {
+    try {
+      localStorage.removeItem("civsetu_complaint_draft");
+      setDraftSavedTime(null);
+    } catch {
+      // ignore
+    }
+  };
+
+  // GPS / Geolocation Capture (Real Browser Geolocation with Lakshmeshwar fallback mock)
+  const handleCaptureLocation = () => {
+    setIsLocating(true);
+    setLocationStatus("Querying device GPS sensors...");
+
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setLatitude(parseFloat(pos.coords.latitude.toFixed(6)));
+          setLongitude(parseFloat(pos.coords.longitude.toFixed(6)));
+          setLocationCaptured(true);
+          setIsLocating(false);
+          setLocationStatus(
+            `Coordinates tagged: ${pos.coords.latitude.toFixed(4)}°N, ${pos.coords.longitude.toFixed(4)}°E (±${Math.round(pos.coords.accuracy)}m)`
+          );
+        },
+        () => {
+          // Fallback to Lakshmeshwar TMC municipal center coordinates with minor simulated local variance
+          const fallbackLat = 15.1245;
+          const fallbackLng = 75.4744;
+          setLatitude(fallbackLat);
+          setLongitude(fallbackLng);
+          setLocationCaptured(true);
+          setIsLocating(false);
+          setLocationStatus(
+            `GPS Tagged: 15.1245°N, 75.4744°E (Lakshmeshwar TMC Municipal Zone)`
+          );
+        },
+        { timeout: 8000, enableHighAccuracy: true }
+      );
+    } else {
+      // Geolocation unsupported fallback
+      setLatitude(15.1245);
+      setLongitude(75.4744);
+      setLocationCaptured(true);
+      setIsLocating(false);
+      setLocationStatus("Lakshmeshwar Municipal Zone (15.1245°N, 75.4744°E)");
+    }
+  };
+
+  const handleClearLocation = () => {
+    setLatitude(null);
+    setLongitude(null);
+    setLocationCaptured(false);
+    setLocationStatus(null);
+  };
+
+  // Photo Attachment Handler
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check size limit: 5MB
+    if (file.size > 5 * 1024 * 1024) {
+      setErrors((prev) => ({ ...prev, photo: "Photo attachment must be under 5MB." }));
+      return;
+    }
+
+    setPhotoName(file.name);
+    setPhotoSize((file.size / (1024 * 1024)).toFixed(2) + " MB");
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPhotoPreview(reader.result as string);
+      setErrors((prev) => {
+        const rest = { ...prev };
+        delete rest.photo;
+        return rest;
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePhoto = () => {
+    setPhotoPreview(null);
+    setPhotoName(null);
+    setPhotoSize(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  // AI Assistant: Simulate smart grievance drafting / enhancement
+  const handleRunAiAssistant = () => {
+    setIsAiProcessing(true);
+    setAiGeneratedSuggestion(null);
+
+    // Simulate AI generation based on citizen prompt or selected category
+    setTimeout(() => {
+      const selectedCat = COMPLAINT_CATEGORIES.find((c) => c.name === category);
+      const rawPrompt = aiPromptInput.trim() || title || "Civic issue needing municipal repair";
+
+      let generatedTitle = "";
+      let generatedDesc = "";
+
+      if (category.toLowerCase().includes("water")) {
+        generatedTitle = "Urgent: Potable Water Pipeline Leakage & Roadside Flooding";
+        generatedDesc = `Official Grievance to Lakshmeshwar TMC Water Works Section:
+Issue: ${rawPrompt}.
+Observed Impact: Continuous water wastage from the municipal distribution line causing muddy water accumulation and pressure loss for adjacent households.
+Request: Immediate dispatch of maintenance technician to inspect line pressure, repair pipeline burst, and restore safe potable supply.`;
+      } else if (category.toLowerCase().includes("street") || category.toLowerCase().includes("light")) {
+        generatedTitle = "Non-Functional Streetlights Creating Nighttime Safety Hazard";
+        generatedDesc = `Official Grievance to Lakshmeshwar TMC Electrical Wing:
+Issue: ${rawPrompt}.
+Observed Impact: Multiple LED streetlights along the municipal thoroughfare have been completely dark for consecutive evenings, compromising pedestrian safety and vehicle visibility.
+Request: Inspection of overhead lines and replacement of defective fixtures or timers at the earliest.`;
+      } else if (category.toLowerCase().includes("waste") || category.toLowerCase().includes("sanitat")) {
+        generatedTitle = "Overflowing Municipal Garbage Dump Requiring Immediate Clearance";
+        generatedDesc = `Official Grievance to Health & Sanitation Section, Lakshmeshwar TMC:
+Issue: ${rawPrompt}.
+Observed Impact: Severe accumulation of uncollected solid waste leading to foul odors, stray animal scavenging, and severe hygiene hazards for nearby residents and school children.
+Request: Emergency deployment of municipal solid waste collection vehicle and sanitary powder spraying.`;
+      } else if (category.toLowerCase().includes("road") || category.toLowerCase().includes("drain")) {
+        generatedTitle = "Deep Potholes and Damaged Culvert Causing Traffic Hazard";
+        generatedDesc = `Official Grievance to Public Works & Civil Engineering Wing, Lakshmeshwar TMC:
+Issue: ${rawPrompt}.
+Observed Impact: Deteriorated asphalt surface with hazardous depressions and clogged drainage overflow during rain, causing vehicle damage and water stagnation.
+Request: Asphalt patching, drainage desilting, and restoration of road surface safety.`;
+      } else {
+        generatedTitle = `Municipal Attention Required: ${rawPrompt.slice(0, 50)}`;
+        generatedDesc = `Official Citizen Grievance to Lakshmeshwar Town Municipal Council:
+Grievance Details: ${rawPrompt}.
+Location Reference: ${address || selectedWard || "Lakshmeshwar Town Jurisdiction"}.
+Citizen Impact: The issue is causing persistent inconvenience and requires on-site inspection and formal resolution by the concerned municipal section under public service guarantees.`;
+      }
+
+      setAiGeneratedSuggestion({
+        title: generatedTitle,
+        description: generatedDesc,
+      });
+      setIsAiProcessing(false);
+    }, 700);
+  };
+
+  const handleApplyAiSuggestion = () => {
+    if (aiGeneratedSuggestion) {
+      setTitle(aiGeneratedSuggestion.title);
+      setDescription(aiGeneratedSuggestion.description);
+      setErrors((prev) => {
+        const rest = { ...prev };
+        delete rest.title;
+        delete rest.description;
+        return rest;
+      });
+    }
+    setAiAssistantOpen(false);
+    setAiPromptInput("");
+    setAiGeneratedSuggestion(null);
+  };
+
+  // Validation before Review
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (!category.trim()) {
+      newErrors.category = "Please select a municipal complaint category.";
+    }
+
+    if (!title.trim()) {
+      newErrors.title = "Please provide a descriptive subject or title.";
+    } else if (title.trim().length < 3) {
+      newErrors.title = "Subject must be at least 3 characters long.";
+    } else if (title.trim().length > 255) {
+      newErrors.title = "Subject exceeds maximum limit of 255 characters.";
+    }
+
+    if (!description.trim()) {
+      newErrors.description = "Please describe the civic issue in detail.";
+    } else if (description.trim().length < 10) {
+      newErrors.description = "Description must be at least 10 characters long.";
+    }
+
+    if (!selectedWard.trim()) {
+      newErrors.ward = "Please select the TMC Ward jurisdiction.";
+    }
+
+    if (!address.trim()) {
+      newErrors.address = "Please provide the specific street address or landmark.";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Move from Step 1 (Form) to Step 2 (Review)
+  const handleProceedToReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitError(null);
+
+    if (validateForm()) {
+      // Auto-save draft on proceeding to review
+      handleSaveDraft();
+      setCurrentStep(2);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      // Scroll to first error
+      const firstErrorKey = Object.keys(errors)[0];
+      const el = document.getElementById(`field-${firstErrorKey}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+  };
+
+  // Submit Final Reviewed Form to Backend API
+  const handleSubmitGrievance = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const payload = {
+        category: category.trim(),
+        title: title.trim(),
+        description: description.trim(),
+        ward: selectedWard.trim(),
+        address: address.trim(),
+        latitude: latitude,
+        longitude: longitude,
+        photoUrl: photoPreview || null,
+        priority: priority,
+      };
+
+      const res = await fetch("/api/complaints", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        setSubmitError(json.error || "Failed to register complaint with Lakshmeshwar TMC.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Complaint created successfully
+      setSubmittedComplaint(json.data);
+      setCurrentStep(3); // Step 3: Confirmation
+      // Clean up local draft upon successful registration
+      try {
+        localStorage.removeItem("civsetu_complaint_draft");
+      } catch {
+        // ignore
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      setSubmitError("Network communication error. Please check your connection and try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Copy Complaint ID Helper
+  const handleCopyId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2500);
+  };
+
+  // Department calculation helper for review screen
+  const getAssignedDepartment = (catName: string) => {
+    const item = COMPLAINT_CATEGORIES.find((c) => c.name === catName);
+    return item ? item.department : "Lakshmeshwar TMC Citizen Facilitation Centre";
+  };
+
+  // Calculate SLA hours
+  const selectedPriorityMeta = PRIORITIES.find((p) => p.level === priority) || PRIORITIES[1];
+
+  // ---------------------------------------------------------------------------
+  // 1. Loading State
+  // ---------------------------------------------------------------------------
+  if (authLoading) {
+    return (
+      <PageContainer
+        title="Lodge Citizen Grievance"
+        subtitle="Lakshmeshwar Town Municipal Council Public Redressal"
+        breadcrumbs={[{ label: "Citizen Portal", href: "/dashboard" }, { label: "Register Grievance" }]}
+      >
+        <div className="max-w-xl mx-auto py-16 text-center space-y-4">
+          <RefreshCw className="w-9 h-9 text-[#064E4A] dark:text-teal-400 animate-spin mx-auto" />
+          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">
+            Verifying Citizen Authentication...
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Securely validating your active Lakshmeshwar citizen session credentials.
+          </p>
+        </div>
+      </PageContainer>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 2. Unauthenticated Gate
+  // ---------------------------------------------------------------------------
+  if (!isAuthenticated || !citizen) {
+    return (
+      <PageContainer
+        title="Lodge Citizen Grievance"
+        subtitle="Official Public Redressal & Civic Issue Dispatch"
+        breadcrumbs={[{ label: "Citizen Portal", href: "/dashboard" }, { label: "Register Grievance" }]}
+      >
+        <div className="max-w-md mx-auto py-8">
+          <div className="bg-white dark:bg-[#071d1b] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 sm:p-8 text-center space-y-5 shadow-sm">
+            <div className="w-14 h-14 bg-amber-100 dark:bg-amber-950/60 rounded-full flex items-center justify-center mx-auto text-amber-700 dark:text-amber-300">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                Citizen Authentication Required
+              </h2>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                To prevent fraudulent submissions and guarantee official government accountability with tracked SLA timelines, you must be signed in to lodge an official complaint.
+              </p>
+            </div>
+
+            <div className="p-3 bg-teal-50 dark:bg-teal-950/40 rounded-xl border border-teal-200 dark:border-teal-800 text-left text-xs text-[#064E4A] dark:text-teal-300 space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4" />
+                <span>Protected Civic Redressal Benefits:</span>
+              </p>
+              <ul className="list-disc list-inside space-y-0.5 text-[11px] text-gray-700 dark:text-gray-300 ml-1">
+                <li>Automated assignment to Lakshmeshwar ward engineers</li>
+                <li>Legally binding SLA resolution clock (24h - 120h)</li>
+                <li>Live SMS & status updates on your citizen dashboard</li>
+              </ul>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center">
+              <Link
+                href="/login"
+                className="bg-[#064E4A] hover:bg-[#0B6B63] text-white px-6 py-2.5 rounded-lg text-sm font-bold transition shadow-sm flex items-center justify-center gap-1.5"
+              >
+                <span>Sign In to Continue</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link
+                href="/register"
+                className="border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 px-5 py-2.5 rounded-lg text-sm font-semibold transition"
+              >
+                Create Account
+              </Link>
+            </div>
+          </div>
+        </div>
+      </PageContainer>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3. Authenticated Grievance Form & Workflow
+  // ---------------------------------------------------------------------------
+  return (
+    <PageContainer
+      title="Lodge Citizen Grievance"
+      subtitle="Lakshmeshwar Town Municipal Council - Public Service Redressal & Dispatch"
+      breadcrumbs={[
+        { label: "Citizen Portal", href: "/dashboard" },
+        { label: "Register Grievance" },
+      ]}
+    >
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Step Progress Header */}
+        <div className="bg-gray-50 dark:bg-gray-800/40 p-4 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800">
+          <div className="flex items-center justify-between max-w-2xl mx-auto">
+            {/* Step 1 */}
+            <div className="flex items-center gap-2.5">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition ${
+                  currentStep === 1
+                    ? "bg-[#064E4A] text-white ring-4 ring-teal-100 dark:ring-teal-900"
+                    : currentStep > 1
+                    ? "bg-emerald-600 text-white"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                }`}
+              >
+                {currentStep > 1 ? <Check className="w-4 h-4" /> : "1"}
+              </div>
+              <div className="hidden sm:block text-left">
+                <p className="text-xs font-bold text-gray-900 dark:text-gray-100">Grievance Details</p>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400">Fill issue information</p>
+              </div>
+            </div>
+
+            <div
+              className={`flex-1 h-0.5 mx-3 transition-colors ${
+                currentStep >= 2 ? "bg-emerald-600" : "bg-gray-200 dark:bg-gray-700"
+              }`}
+            />
+
+            {/* Step 2 */}
+            <div className="flex items-center gap-2.5">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition ${
+                  currentStep === 2
+                    ? "bg-[#064E4A] text-white ring-4 ring-teal-100 dark:ring-teal-900"
+                    : currentStep > 2
+                    ? "bg-emerald-600 text-white"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                }`}
+              >
+                {currentStep > 2 ? <Check className="w-4 h-4" /> : "2"}
+              </div>
+              <div className="hidden sm:block text-left">
+                <p className="text-xs font-bold text-gray-900 dark:text-gray-100">Review & Verify</p>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400">Confirm submission</p>
+              </div>
+            </div>
+
+            <div
+              className={`flex-1 h-0.5 mx-3 transition-colors ${
+                currentStep === 3 ? "bg-emerald-600" : "bg-gray-200 dark:bg-gray-700"
+              }`}
+            />
+
+            {/* Step 3 */}
+            <div className="flex items-center gap-2.5">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition ${
+                  currentStep === 3
+                    ? "bg-emerald-600 text-white ring-4 ring-emerald-100 dark:ring-emerald-950"
+                    : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                }`}
+              >
+                3
+              </div>
+              <div className="hidden sm:block text-left">
+                <p className="text-xs font-bold text-gray-900 dark:text-gray-100">Official Receipt</p>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400">Tracking & SLA info</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Global Error Alert */}
+        {submitError && (
+          <div
+            role="alert"
+            className="p-4 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-xs sm:text-sm flex items-start gap-3 shadow-sm"
+          >
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-bold">Submission Error</p>
+              <p className="mt-0.5">{submitError}</p>
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================================
+            STEP 1: FILL COMPLAINT FORM
+           ===================================================================== */}
+        {currentStep === 1 && (
+          <div className="space-y-6">
+            {/* Citizen Context Banner */}
+            <div className="p-4 rounded-xl bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-[#064E4A] text-white flex items-center justify-center font-bold text-sm">
+                  {citizen.fullName.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900 dark:text-gray-100">
+                    Lodge as: <span className="text-[#064E4A] dark:text-teal-300">{citizen.fullName}</span>
+                  </p>
+                  <p className="text-gray-500 dark:text-gray-400 text-[11px]">
+                    Mobile: +91 {citizen.mobileNumber} | Registered Ward: {citizen.wardNumber || "TMC Area"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Draft Status & Actions */}
+              <div className="flex items-center gap-2 self-end sm:self-center">
+                {draftSavedTime && (
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-700">
+                    Draft saved: {draftSavedTime}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSaveDraft}
+                  className="px-2.5 py-1 text-[11px] font-semibold text-gray-600 dark:text-gray-300 hover:text-[#064E4A] bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 transition"
+                  title="Save in progress draft locally"
+                >
+                  Save Draft
+                </button>
+                {draftSavedTime && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreDraft}
+                    className="px-2.5 py-1 text-[11px] font-semibold text-teal-700 dark:text-teal-300 hover:underline"
+                  >
+                    Restore
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handleProceedToReview} noValidate className="space-y-6">
+              {/* Section 1: Complaint Category */}
+              <div id="field-category" className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
+                    1. Select Municipal Department / Issue Category <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Determines assigned Lakshmeshwar TMC engineering wing
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {COMPLAINT_CATEGORIES.map((cat) => {
+                    const Icon = cat.icon;
+                    const isSelected = category === cat.name;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          setCategory(cat.name);
+                          setErrors((prev) => {
+                            const rest = { ...prev };
+                            delete rest.category;
+                            return rest;
+                          });
+                        }}
+                        className={`p-3.5 rounded-xl border text-left transition-all flex items-start gap-3 ${
+                          isSelected
+                            ? "border-[#064E4A] dark:border-teal-400 bg-teal-50/60 dark:bg-teal-950/40 ring-2 ring-[#064E4A] dark:ring-teal-400/40"
+                            : "border-gray-200 dark:border-gray-800 hover:border-teal-300 dark:hover:border-teal-700 bg-white dark:bg-[#071d1b]"
+                        }`}
+                      >
+                        <div
+                          className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                            isSelected
+                              ? "bg-[#064E4A] text-white"
+                              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300"
+                          }`}
+                        >
+                          <Icon className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                            {cat.name}
+                          </p>
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
+                            {cat.description}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {errors.category && (
+                  <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1 mt-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{errors.category}</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Section 2: Priority & SLA Guarantee */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
+                    2. Grievance Urgency & SLA Resolution Guarantee
+                  </label>
+                  <span className="text-[11px] text-teal-700 dark:text-teal-300 font-semibold flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5" />
+                    Target SLA: {selectedPriorityMeta.slaHours} Hours
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {PRIORITIES.map((p) => {
+                    const isSelected = priority === p.level;
+                    return (
+                      <button
+                        key={p.level}
+                        type="button"
+                        onClick={() => setPriority(p.level)}
+                        className={`p-3 rounded-xl border text-center transition-all ${
+                          isSelected
+                            ? "border-[#064E4A] dark:border-teal-400 bg-teal-50 dark:bg-teal-950/40 ring-1 ring-[#064E4A] dark:ring-teal-400 font-bold"
+                            : "border-gray-200 dark:border-gray-800 bg-white dark:bg-[#071d1b] hover:border-gray-300 text-gray-700 dark:text-gray-300"
+                        }`}
+                      >
+                        <p className="text-xs font-bold text-gray-900 dark:text-gray-100">{p.level}</p>
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                          {p.slaHours}h SLA
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 italic">
+                  {selectedPriorityMeta.description}
+                </p>
+              </div>
+
+              {/* Section 3: Subject & AI Polish */}
+              <div id="field-title" className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="complaint-title" className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
+                    3. Complaint Subject / Title <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex items-center gap-3">
+                    {/* AI Assistant Button */}
+                    <button
+                      type="button"
+                      onClick={() => setAiAssistantOpen(true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#064E4A] dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/60 px-2.5 py-1 rounded-full border border-teal-200 dark:border-teal-800 transition"
+                      title="Open Civic AI Assistant"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      <span>AI Assistant</span>
+                    </button>
+                    <span className="text-[11px] text-gray-400">
+                      {title.length}/255
+                    </span>
+                  </div>
+                </div>
+
+                <input
+                  id="complaint-title"
+                  type="text"
+                  maxLength={255}
+                  value={title}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    if (errors.title) {
+                      setErrors((prev) => {
+                        const rest = { ...prev };
+                        delete rest.title;
+                        return rest;
+                      });
+                    }
+                  }}
+                  placeholder="e.g., Major drinking water pipeline burst outside Someshwara Temple"
+                  className={`w-full px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm bg-white dark:bg-gray-800 focus:outline-none transition ${
+                    errors.title
+                      ? "border-red-400 focus:ring-2 focus:ring-red-200"
+                      : "border-gray-300 dark:border-gray-700 focus:border-[#064E4A] focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900"
+                  }`}
+                />
+
+                {errors.title && (
+                  <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{errors.title}</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Section 4: Description */}
+              <div id="field-description" className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="complaint-desc" className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
+                    4. Detailed Grievance Description <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-[11px] text-gray-400">
+                    {description.length} characters (min 10)
+                  </span>
+                </div>
+
+                <textarea
+                  id="complaint-desc"
+                  rows={4}
+                  value={description}
+                  onChange={(e) => {
+                    setDescription(e.target.value);
+                    if (errors.description) {
+                      setErrors((prev) => {
+                        const rest = { ...prev };
+                        delete rest.description;
+                        return rest;
+                      });
+                    }
+                  }}
+                  placeholder="Please specify exact details: What is happening? When did it start? What is the impact on residents, pedestrians, or traffic? Has any preliminary notice been given to ward staff?"
+                  className={`w-full px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm bg-white dark:bg-gray-800 focus:outline-none transition ${
+                    errors.description
+                      ? "border-red-400 focus:ring-2 focus:ring-red-200"
+                      : "border-gray-300 dark:border-gray-700 focus:border-[#064E4A] focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900"
+                  }`}
+                />
+
+                {errors.description && (
+                  <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{errors.description}</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Section 5: Ward & Location */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Ward Selection */}
+                <div id="field-ward" className="space-y-2">
+                  <label htmlFor="complaint-ward" className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
+                    5. Ward Jurisdiction <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    id="complaint-ward"
+                    value={selectedWard}
+                    onChange={(e) => {
+                      setSelectedWard(e.target.value);
+                      if (errors.ward) {
+                        setErrors((prev) => {
+                          const rest = { ...prev };
+                          delete rest.ward;
+                          return rest;
+                        });
+                      }
+                    }}
+                    className={`w-full px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm bg-white dark:bg-gray-800 focus:outline-none transition ${
+                      errors.ward
+                        ? "border-red-400 focus:ring-2 focus:ring-red-200"
+                        : "border-gray-300 dark:border-gray-700 focus:border-[#064E4A] focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900"
+                    }`}
+                  >
+                    <option value="">-- Select Lakshmeshwar Ward --</option>
+                    {wardsData.map((w) => (
+                      <option
+                        key={w.wardNumber}
+                        value={`Ward ${String(w.wardNumber).padStart(2, "0")}`}
+                      >
+                        Ward {w.wardNumber} - {w.name}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.ward && (
+                    <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span>{errors.ward}</span>
+                    </p>
+                  )}
+                </div>
+
+                {/* Specific Location / Address */}
+                <div id="field-address" className="space-y-2">
+                  <label htmlFor="complaint-address" className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
+                    6. Incident Location / Landmark <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="complaint-address"
+                    type="text"
+                    value={address}
+                    onChange={(e) => {
+                      setAddress(e.target.value);
+                      if (errors.address) {
+                        setErrors((prev) => {
+                          const rest = { ...prev };
+                          delete rest.address;
+                          return rest;
+                        });
+                      }
+                    }}
+                    placeholder="e.g., Near Someshwara Temple Main Gate, Station Road"
+                    className={`w-full px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm bg-white dark:bg-gray-800 focus:outline-none transition ${
+                      errors.address
+                        ? "border-red-400 focus:ring-2 focus:ring-red-200"
+                        : "border-gray-300 dark:border-gray-700 focus:border-[#064E4A] focus:ring-2 focus:ring-teal-100 dark:focus:ring-teal-900"
+                    }`}
+                  />
+                  {errors.address && (
+                    <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span>{errors.address}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Section 6: GPS Geolocation Capture (Mock/Real Browser Integration) */}
+              <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Compass className="w-4 h-4 text-[#064E4A] dark:text-teal-400" />
+                    <span className="text-xs font-bold text-gray-900 dark:text-gray-100">
+                      GPS Incident Geotagging (Optional but Recommended)
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {!locationCaptured ? (
+                      <button
+                        type="button"
+                        onClick={handleCaptureLocation}
+                        disabled={isLocating}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#064E4A] hover:bg-[#0B6B63] text-white text-xs font-bold rounded-lg transition shadow-sm disabled:opacity-50"
+                      >
+                        {isLocating ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Locating Device...</span>
+                          </>
+                        ) : (
+                          <>
+                            <MapPin className="w-3.5 h-3.5 text-teal-300" />
+                            <span>Capture Current Location</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleClearLocation}
+                        className="text-xs text-red-600 dark:text-red-400 hover:underline"
+                      >
+                        Clear GPS
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {locationCaptured ? (
+                  <div className="flex items-center justify-between p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs text-emerald-800 dark:text-emerald-300">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                      <div>
+                        <span className="font-bold">GPS Tag Recorded: </span>
+                        <span className="font-mono">{latitude}° N, {longitude}° E</span>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                          Lakshmeshwar Municipal Zone GIS reference verified.
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 text-[10px] font-bold">
+                      Geotagged
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Attaching exact geographic coordinates allows municipal field inspectors to route directly to the complaint site using mobile navigation.
+                  </p>
+                )}
+              </div>
+
+              {/* Section 7: Photographic Evidence Upload */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
+                    7. Photographic Evidence (Optional, max 5MB)
+                  </label>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                    JPG, PNG, WebP supported
+                  </span>
+                </div>
+
+                {!photoPreview ? (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-[#064E4A] dark:hover:border-teal-400 rounded-2xl p-6 text-center cursor-pointer transition bg-white dark:bg-gray-800/40 group"
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handlePhotoSelect}
+                      className="hidden"
+                    />
+                    <div className="w-12 h-12 rounded-full bg-teal-50 dark:bg-teal-950/60 text-[#064E4A] dark:text-teal-400 flex items-center justify-center mx-auto mb-2 group-hover:scale-105 transition">
+                      <Camera className="w-6 h-6" />
+                    </div>
+                    <p className="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-200">
+                      Click to upload photo evidence or take picture
+                    </p>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                      Clear photos of water leaks, garbage mounds, or road defects significantly accelerate municipal verification.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50/40 dark:bg-teal-950/20 flex items-center gap-4">
+                    <img
+                      src={photoPreview}
+                      alt="Grievance evidence preview"
+                      className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate">
+                        {photoName}
+                      </p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                        File Size: {photoSize}
+                      </p>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Ready to attach to official record</span>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-white dark:hover:bg-gray-800 transition"
+                      title="Remove attached photo"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                )}
+
+                {errors.photo && (
+                  <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>{errors.photo}</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Form Action Controls */}
+              <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <Link
+                  href="/dashboard"
+                  className="w-full sm:w-auto px-5 py-2.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-center transition"
+                >
+                  Cancel & Return to Dashboard
+                </Link>
+
+                <div className="w-full sm:w-auto flex items-center gap-3">
+                  <button
+                    type="submit"
+                    className="w-full sm:w-auto px-7 py-3 bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold text-sm rounded-xl transition shadow hover:shadow-md flex items-center justify-center gap-2"
+                  >
+                    <span>Review Complaint</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* =====================================================================
+            STEP 2: REVIEW COMPLAINT BEFORE SUBMISSION
+           ===================================================================== */}
+        {currentStep === 2 && (
+          <div className="space-y-6">
+            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex items-start gap-3 text-xs text-amber-800 dark:text-amber-300">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-600" />
+              <div>
+                <p className="font-bold text-sm">Step 2: Review Before Official Registration</p>
+                <p className="mt-0.5 leading-relaxed">
+                  Please verify all grievance information carefully. Upon submission, an official immutable tracking record will be registered in Lakshmeshwar Town Municipal Council records, and an escalation clock will initiate.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-[#071d1b] border border-gray-200 dark:border-gray-800 rounded-2xl p-5 sm:p-6 shadow-sm space-y-6">
+              {/* Category & SLA Summary */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-200 dark:border-gray-800 gap-3">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                    Municipal Category
+                  </span>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-0.5">
+                    {category}
+                  </h3>
+                  <p className="text-xs text-teal-700 dark:text-teal-300 font-semibold mt-0.5">
+                    Assigned: {getAssignedDepartment(category)}
+                  </p>
+                </div>
+
+                <div className="self-start sm:self-auto text-left sm:text-right">
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold border ${selectedPriorityMeta.badgeClass}`}>
+                    {priority} Priority
+                  </span>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1 sm:justify-end">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>SLA Guarantee: {selectedPriorityMeta.slaHours} Hours</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Title & Description */}
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-xs font-bold uppercase text-gray-400 tracking-wider">
+                    Complaint Subject / Title
+                  </h4>
+                  <p className="text-base font-bold text-gray-900 dark:text-gray-100 mt-1">
+                    {title}
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-bold uppercase text-gray-400 tracking-wider">
+                    Detailed Grievance Description
+                  </h4>
+                  <div className="mt-1 p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 text-xs sm:text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                    {description}
+                  </div>
+                </div>
+              </div>
+
+              {/* Location & GPS Breakdown */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-800 text-xs">
+                <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 space-y-1">
+                  <p className="font-bold text-gray-500 dark:text-gray-400 text-[11px] uppercase">
+                    Ward Jurisdiction
+                  </p>
+                  <p className="font-bold text-gray-900 dark:text-gray-100 text-sm">
+                    {selectedWard}
+                  </p>
+                  <p className="text-gray-500 dark:text-gray-400 text-[11px]">
+                    Lakshmeshwar Town Municipal Council Area
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 space-y-1">
+                  <p className="font-bold text-gray-500 dark:text-gray-400 text-[11px] uppercase">
+                    Incident Landmark / Address
+                  </p>
+                  <p className="font-bold text-gray-900 dark:text-gray-100 text-sm">
+                    {address}
+                  </p>
+                  {locationCaptured ? (
+                    <p className="text-emerald-700 dark:text-emerald-400 text-[11px] font-semibold flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>GPS Tag: {latitude}° N, {longitude}° E</span>
+                    </p>
+                  ) : (
+                    <p className="text-gray-400 text-[11px]">No GPS coordinates attached</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Attached Evidence Preview (if any) */}
+              {photoPreview && (
+                <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+                  <p className="text-xs font-bold uppercase text-gray-400 tracking-wider mb-2">
+                    Attached Photographic Evidence
+                  </p>
+                  <div className="inline-flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl">
+                    <img
+                      src={photoPreview}
+                      alt="Grievance evidence"
+                      className="w-16 h-16 object-cover rounded-lg"
+                    />
+                    <div className="text-xs pr-2">
+                      <p className="font-bold text-gray-900 dark:text-gray-100">{photoName}</p>
+                      <p className="text-gray-500 dark:text-gray-400 text-[11px]">{photoSize}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Filing Citizen Profile Info */}
+              <div className="pt-4 border-t border-gray-200 dark:border-gray-800 bg-teal-50/40 dark:bg-teal-950/20 p-4 rounded-xl border border-teal-100 dark:border-teal-900">
+                <p className="text-xs font-bold uppercase text-[#064E4A] dark:text-teal-300 tracking-wider mb-2">
+                  Official Complainant Information
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400 block text-[11px]">Citizen Name</span>
+                    <span className="font-bold text-gray-900 dark:text-gray-100">{citizen.fullName}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400 block text-[11px]">Registered Mobile</span>
+                    <span className="font-bold text-gray-900 dark:text-gray-100">+91 {citizen.mobileNumber}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400 block text-[11px]">Email Address</span>
+                    <span className="font-bold text-gray-900 dark:text-gray-100">{citizen.email}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Review Step Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCurrentStep(1)}
+                disabled={isSubmitting}
+                className="w-full sm:w-auto px-6 py-2.5 text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl border border-gray-300 dark:border-gray-700 transition flex items-center justify-center gap-1.5"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Edit Complaint Details</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSubmitGrievance}
+                disabled={isSubmitting}
+                className="w-full sm:w-auto px-8 py-3 bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold text-sm rounded-xl transition shadow hover:shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Registering with Lakshmeshwar TMC...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4 text-teal-300" />
+                    <span>Confirm & Submit Official Complaint</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================================
+            STEP 3: SUBMISSION CONFIRMATION & OFFICIAL RECEIPT
+           ===================================================================== */}
+        {currentStep === 3 && submittedComplaint && (
+          <div className="space-y-6">
+            {/* Success Banner */}
+            <div className="bg-emerald-600 text-white p-6 sm:p-8 rounded-2xl text-center space-y-3 shadow-sm">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-10 h-10 text-white" />
+              </div>
+              <h2 className="text-xl sm:text-2xl font-extrabold">
+                Grievance Registered Successfully!
+              </h2>
+              <p className="text-xs sm:text-sm text-emerald-100 max-w-xl mx-auto leading-relaxed">
+                Your complaint has been formally lodged with the Lakshmeshwar Town Municipal Council. The designated municipal engineering section has been notified.
+              </p>
+            </div>
+
+            {/* Official Receipt Card */}
+            <div className="bg-white dark:bg-[#071d1b] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-200 dark:border-gray-800 gap-3">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                    Official Reference Tracking ID
+                  </span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="font-mono text-xl sm:text-2xl font-extrabold text-[#064E4A] dark:text-teal-300">
+                      {submittedComplaint.id}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyId(submittedComplaint.id)}
+                      className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition"
+                      title="Copy Tracking ID"
+                    >
+                      {copiedId ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="self-start sm:self-auto text-left sm:text-right space-y-1">
+                  <span className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-teal-100 dark:bg-teal-950/60 text-[#064E4A] dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                    Status: {submittedComplaint.status || "Submitted"}
+                  </span>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Level: {submittedComplaint.authorityLevel || "Local Authority"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Resolution SLA & Routing Matrix */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs sm:text-sm">
+                <div className="p-4 rounded-xl bg-teal-50/50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 space-y-1.5">
+                  <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase">
+                    Assigned Municipal Section
+                  </p>
+                  <p className="font-bold text-[#064E4A] dark:text-teal-200">
+                    {submittedComplaint.assignedAuthority}
+                  </p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Jurisdiction: {submittedComplaint.ward}
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 space-y-1.5">
+                  <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase">
+                    Guaranteed SLA Resolution Deadline
+                  </p>
+                  <p className="font-bold text-amber-800 dark:text-amber-300">
+                    {submittedComplaint.deadline
+                      ? new Date(submittedComplaint.deadline).toLocaleString("en-IN", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })
+                      : `${selectedPriorityMeta.slaHours} Hours`}
+                  </p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Automatic escalation if unaddressed within SLA window.
+                  </p>
+                </div>
+              </div>
+
+              {/* Receipt Summary Table */}
+              <div className="space-y-2 text-xs">
+                <p className="font-bold uppercase tracking-wider text-gray-400 text-[11px]">
+                  Summary of Lodged Grievance
+                </p>
+                <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
+                  <div className="flex p-3">
+                    <span className="w-1/3 text-gray-500 dark:text-gray-400">Subject</span>
+                    <span className="w-2/3 font-semibold text-gray-900 dark:text-gray-100">{submittedComplaint.title}</span>
+                  </div>
+                  <div className="flex p-3">
+                    <span className="w-1/3 text-gray-500 dark:text-gray-400">Category</span>
+                    <span className="w-2/3 text-gray-800 dark:text-gray-200">{submittedComplaint.category}</span>
+                  </div>
+                  <div className="flex p-3">
+                    <span className="w-1/3 text-gray-500 dark:text-gray-400">Location</span>
+                    <span className="w-2/3 text-gray-800 dark:text-gray-200">{submittedComplaint.address || address}</span>
+                  </div>
+                  <div className="flex p-3">
+                    <span className="w-1/3 text-gray-500 dark:text-gray-400">Complainant</span>
+                    <span className="w-2/3 text-gray-800 dark:text-gray-200">{citizen.fullName} (+91 {citizen.mobileNumber})</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Next Steps Card */}
+              <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 text-xs space-y-1.5">
+                <p className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
+                  <Building className="w-4 h-4 text-[#064E4A] dark:text-teal-400" />
+                  <span>Lakshmeshwar TMC Redressal Process:</span>
+                </p>
+                <ul className="list-disc list-inside text-gray-600 dark:text-gray-300 space-y-1 text-[11px] ml-1">
+                  <li>Lakshmeshwar TMC junior engineer will conduct on-site inspection.</li>
+                  <li>Status updates will be logged on the audit timeline accessible via Live Tracker.</li>
+                  <li>You will receive SMS notifications at registered mobile number +91 {citizen.mobileNumber}.</li>
+                </ul>
+              </div>
+
+              {/* Primary Actions */}
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 transition flex items-center justify-center gap-2"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print Acknowledgment</span>
+                </button>
+
+                <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-2.5">
+                  <Link
+                    href={`/track?id=${encodeURIComponent(submittedComplaint.id)}`}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 hover:bg-teal-100 text-[#064E4A] dark:text-teal-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                  >
+                    <span>Track Live Status</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                  <Link
+                    href="/dashboard"
+                    className="w-full sm:w-auto px-6 py-2.5 bg-[#064E4A] hover:bg-[#0B6B63] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center"
+                  >
+                    Return to Dashboard
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* =======================================================================
+          AI ASSISTANT MODAL (Civic AI Assistant Integration Mock)
+         ======================================================================= */}
+      {aiAssistantOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150"
+        >
+          <div className="bg-white dark:bg-[#082220] border border-gray-200 dark:border-gray-800 rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-950 flex items-center justify-center text-[#064E4A] dark:text-teal-300">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 dark:text-gray-100 text-sm">
+                    CivSetu Civic AI Assistant
+                  </h3>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Smart Drafting & Issue Structuring for Lakshmeshwar TMC
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAiAssistantOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
+                Describe the issue in your own words or choose a template below. The Civic AI assistant will structure it into formal government terminology for municipal engineers.
+              </p>
+
+              {/* Quick Template Pills */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  Common Issue Prompts:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {(category
+                    ? COMPLAINT_CATEGORIES.find((c) => c.name === category)?.examples || []
+                    : [
+                        "Water pipe burst causing road flooding",
+                        "Streetlights non-functional for 3 days",
+                        "Overflowing garbage dump near market square",
+                        "Deep potholes damaging vehicles on ward road",
+                      ]
+                  ).map((example, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setAiPromptInput(example)}
+                      className="text-[11px] px-2.5 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-teal-50 dark:hover:bg-teal-950/60 hover:text-[#064E4A] dark:hover:text-teal-300 rounded-full border border-gray-200 dark:border-gray-700 transition"
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Citizen rough notes input */}
+              <div className="space-y-1">
+                <label className="block font-bold text-gray-700 dark:text-gray-300 text-[11px]">
+                  Your Rough Notes or Key Problem:
+                </label>
+                <textarea
+                  rows={3}
+                  value={aiPromptInput}
+                  onChange={(e) => setAiPromptInput(e.target.value)}
+                  placeholder="e.g., water pipe broke near bustop full water on road since yesterday morning..."
+                  className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-teal-100"
+                />
+              </div>
+
+              {/* Generation Button */}
+              <button
+                type="button"
+                onClick={handleRunAiAssistant}
+                disabled={isAiProcessing}
+                className="w-full py-2.5 bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold rounded-xl transition flex items-center justify-center gap-2 text-xs disabled:opacity-50"
+              >
+                {isAiProcessing ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Formatting Formal Grievance...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Generate Structured Complaint</span>
+                  </>
+                )}
+              </button>
+
+              {/* AI Suggestion Output */}
+              {aiGeneratedSuggestion && (
+                <div className="p-3.5 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 space-y-2 mt-2 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase text-[#064E4A] dark:text-teal-300 tracking-wider">
+                      Suggested Official Format:
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-800 dark:text-gray-100">
+                      Subject:
+                    </p>
+                    <p className="text-xs text-[#064E4A] dark:text-teal-200 font-semibold">
+                      {aiGeneratedSuggestion.title}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-800 dark:text-gray-100">
+                      Description:
+                    </p>
+                    <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
+                      {aiGeneratedSuggestion.description}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAiGeneratedSuggestion(null)}
+                      className="px-3 py-1 text-[11px] text-gray-600 dark:text-gray-400 hover:underline"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleApplyAiSuggestion}
+                      className="px-4 py-1.5 bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold text-xs rounded-lg transition"
+                    >
+                      Apply to Complaint Form
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </PageContainer>
+  );
+}

@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   ArrowRight,
   RefreshCw,
+  PlusCircle,
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -92,24 +93,33 @@ export default function DashboardPage() {
       breadcrumbs={[{ label: "Citizen Portal" }]}
     >
       <div className="max-w-3xl mx-auto py-2 sm:py-4 space-y-6">
-        {/* Next Development Phase Notice */}
-        <div className="p-5 rounded-2xl bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/40 border border-teal-300 dark:border-teal-800 shadow-sm flex items-start gap-4">
-          <div className="w-10 h-10 rounded-xl bg-[#064E4A] text-white flex items-center justify-center flex-shrink-0">
-            <ShieldCheck className="w-6 h-6 text-teal-300" />
-          </div>
-          <div className="flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base sm:text-lg font-bold text-[#064E4A] dark:text-teal-200">
-                Citizen Portal is ready for the next development phase.
-              </h2>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-teal-200 dark:bg-teal-900 text-[#064E4A] dark:text-teal-200">
-                Phase 2 Ready
-              </span>
+        {/* Grievance Action Card */}
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-teal-900 to-[#064E4A] text-white shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
+              <ShieldCheck className="w-6 h-6 text-teal-300" />
             </div>
-            <p className="mt-1.5 text-xs sm:text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-              Your citizen account authentication and session management are active. In the upcoming phase, full grievance submissions, online tax payments, water meter services, and ward application tracking will be fully operational from this dashboard.
-            </p>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-white">
+                  Lodge an Official Municipal Grievance
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-400/20 text-teal-200 border border-teal-400/30">
+                  Phase 4 Active
+                </span>
+              </div>
+              <p className="mt-1 text-xs sm:text-sm text-teal-100/90 leading-relaxed max-w-xl">
+                Report drinking water pipeline leaks, dark streetlights, overflowing garbage, or road potholes directly to Lakshmeshwar TMC engineering sections with SLA deadline tracking.
+              </p>
+            </div>
           </div>
+          <Link
+            href="/complaints/new"
+            className="w-full sm:w-auto px-5 py-2.5 bg-white hover:bg-teal-50 text-[#064E4A] font-bold text-xs sm:text-sm rounded-xl transition shadow flex items-center justify-center gap-2 flex-shrink-0"
+          >
+            <PlusCircle className="w-4 h-4 text-[#064E4A]" />
+            <span>Register Complaint</span>
+          </Link>
         </div>
 
         {/* Authenticated Citizen Profile Summary Card */}
@@ -186,18 +196,18 @@ export default function DashboardPage() {
           <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Available Citizen Portals & Services
           </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Link
-              href="/citizen-services"
-              className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#071d1b] hover:border-[#064E4A] dark:hover:border-teal-400 transition shadow-sm group"
+              href="/complaints/new"
+              className="p-4 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-950/30 hover:border-[#064E4A] dark:hover:border-teal-400 transition shadow-sm group"
             >
               <div className="flex items-center justify-between">
-                <FileText className="w-5 h-5 text-[#064E4A] dark:text-teal-400" />
-                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-[#064E4A] dark:group-hover:text-teal-400 transition" />
+                <PlusCircle className="w-5 h-5 text-[#064E4A] dark:text-teal-400" />
+                <ArrowRight className="w-4 h-4 text-teal-600 group-hover:translate-x-0.5 transition" />
               </div>
-              <p className="mt-3 font-bold text-sm text-gray-900 dark:text-gray-100">Municipal Services</p>
+              <p className="mt-3 font-bold text-sm text-[#064E4A] dark:text-teal-200">Register Grievance</p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                Browse official TMC civic programs and utilities
+                Lodge civic issue with TMC SLA resolution
               </p>
             </Link>
 
@@ -212,6 +222,20 @@ export default function DashboardPage() {
               <p className="mt-3 font-bold text-sm text-gray-900 dark:text-gray-100">Track Grievance</p>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 Live lookup of filed applications by ID
+              </p>
+            </Link>
+
+            <Link
+              href="/citizen-services"
+              className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#071d1b] hover:border-[#064E4A] dark:hover:border-teal-400 transition shadow-sm group"
+            >
+              <div className="flex items-center justify-between">
+                <FileText className="w-5 h-5 text-[#064E4A] dark:text-teal-400" />
+                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-[#064E4A] dark:group-hover:text-teal-400 transition" />
+              </div>
+              <p className="mt-3 font-bold text-sm text-gray-900 dark:text-gray-100">Municipal Services</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Browse official TMC civic programs & utilities
               </p>
             </Link>
 
