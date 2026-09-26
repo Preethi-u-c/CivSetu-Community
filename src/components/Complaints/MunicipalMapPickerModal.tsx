@@ -127,19 +127,67 @@ export const LAKSHMESHWAR_LANDMARKS: LandmarkPreset[] = [
   },
 ];
 
+export interface MunicipalLocationSelectedData {
+  latitude: number;
+  longitude: number;
+  landmarkName: string;
+  wardNumber: number;
+  wardCode: string;
+  wardName: string;
+  isSpecificLandmark: boolean;
+}
+
+/**
+ * Normalizes any ward representation (number, "Ward 20", "Ward 4", "Lakshmeshwar Ward No. 20")
+ * into the canonical option value format: "Ward XX" (e.g., "Ward 20", "Ward 04").
+ */
+export const normalizeWardValue = (wardInput?: string | number | null): string => {
+  if (!wardInput) return "";
+  const str = String(wardInput).trim();
+  const match = str.match(/\d+/);
+  if (match) {
+    const num = parseInt(match[0], 10);
+    if (num >= 1 && num <= 23) {
+      return `Ward ${String(num).padStart(2, "0")}`;
+    }
+  }
+  return str;
+};
+
 interface MunicipalMapPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectLocation: (data: {
-    latitude: number;
-    longitude: number;
-    landmarkName: string;
-    wardNumber?: number;
-    wardName?: string;
-  }) => void;
+  onSelectLocation: (data: MunicipalLocationSelectedData) => void;
   initialLat?: number | null;
   initialLng?: number | null;
 }
+
+// Centroids for all 23 Lakshmeshwar TMC wards across the 540x400 SVG map grid
+export const WARD_CENTROIDS: { wardNumber: number; x: number; y: number }[] = [
+  { wardNumber: 1, x: 215, y: 110 },
+  { wardNumber: 2, x: 305, y: 105 },
+  { wardNumber: 3, x: 270, y: 190 },
+  { wardNumber: 4, x: 375, y: 190 },
+  { wardNumber: 5, x: 170, y: 195 },
+  { wardNumber: 6, x: 255, y: 275 },
+  { wardNumber: 7, x: 370, y: 285 },
+  { wardNumber: 8, x: 425, y: 340 },
+  { wardNumber: 9, x: 340, y: 360 },
+  { wardNumber: 10, x: 280, y: 360 },
+  { wardNumber: 11, x: 200, y: 350 },
+  { wardNumber: 12, x: 130, y: 330 },
+  { wardNumber: 13, x: 90, y: 270 },
+  { wardNumber: 14, x: 90, y: 190 },
+  { wardNumber: 15, x: 90, y: 110 },
+  { wardNumber: 16, x: 150, y: 50 },
+  { wardNumber: 17, x: 230, y: 40 },
+  { wardNumber: 18, x: 320, y: 45 },
+  { wardNumber: 19, x: 400, y: 70 },
+  { wardNumber: 20, x: 450, y: 130 },
+  { wardNumber: 21, x: 470, y: 210 },
+  { wardNumber: 22, x: 470, y: 270 },
+  { wardNumber: 23, x: 270, y: 230 },
+];
 
 export const MunicipalMapPickerModal: React.FC<MunicipalMapPickerModalProps> = ({
   isOpen,
@@ -198,6 +246,18 @@ export const MunicipalMapPickerModal: React.FC<MunicipalMapPickerModalProps> = (
             x: Math.max(30, Math.min(510, x)),
             y: Math.max(30, Math.min(370, y)),
           });
+          // Determine closest ward centroid
+          let closestWard = 1;
+          let minWDist = Infinity;
+          for (const w of WARD_CENTROIDS) {
+            const d = Math.hypot(w.x - x, w.y - y);
+            if (d < minWDist) {
+              minWDist = d;
+              closestWard = w.wardNumber;
+            }
+          }
+          setSelectedWardNumber(closestWard);
+          setSelectedLandmark(null);
         }
       }
     }
@@ -252,9 +312,17 @@ export const MunicipalMapPickerModal: React.FC<MunicipalMapPickerModalProps> = (
       setSelectedWardNumber(nearest.wardNumber);
     } else {
       setSelectedLandmark(null);
-      // Determine approximate ward by coordinate zone
-      const wardIndex = (Math.floor((svgX / 540) * 5) + Math.floor((svgY / 400) * 4) * 5) % 23;
-      setSelectedWardNumber(wardIndex + 1);
+      // Determine nearest ward centroid among all 23 Lakshmeshwar wards
+      let closestWard = 1;
+      let minWDist = Infinity;
+      for (const w of WARD_CENTROIDS) {
+        const d = Math.hypot(w.x - svgX, w.y - svgY);
+        if (d < minWDist) {
+          minWDist = d;
+          closestWard = w.wardNumber;
+        }
+      }
+      setSelectedWardNumber(closestWard);
     }
   };
 
@@ -267,11 +335,24 @@ export const MunicipalMapPickerModal: React.FC<MunicipalMapPickerModalProps> = (
     setPinPosition({ x: lm.pinX, y: lm.pinY });
   };
 
+  // Direct ward selection from search
+  const handleSelectWardFromSearch = (wardNum: number) => {
+    setSelectedLandmark(null);
+    setSelectedWardNumber(wardNum);
+    const centroid = WARD_CENTROIDS.find((w) => w.wardNumber === wardNum) || { x: 270, y: 200 };
+    setPinPosition({ x: centroid.x, y: centroid.y });
+    const lng = parseFloat((MIN_LNG + (centroid.x / 540) * (MAX_LNG - MIN_LNG)).toFixed(6));
+    const lat = parseFloat((MAX_LAT - (centroid.y / 400) * (MAX_LAT - MIN_LAT)).toFixed(6));
+    setCurrentLat(lat);
+    setCurrentLng(lng);
+  };
+
   // Confirm selection
   const handleConfirm = () => {
     const matchedWard = wardsData.find((w) => w.wardNumber === selectedWardNumber);
+    const wardCode = `Ward ${String(selectedWardNumber).padStart(2, "0")}`;
     const landmarkLabel = selectedLandmark
-      ? `${selectedLandmark.name} (${selectedLandmark.kannadaName})`
+      ? selectedLandmark.name
       : `Pin Location near Ward ${selectedWardNumber}, Lakshmeshwar`;
 
     onSelectLocation({
@@ -279,7 +360,9 @@ export const MunicipalMapPickerModal: React.FC<MunicipalMapPickerModalProps> = (
       longitude: currentLng,
       landmarkName: landmarkLabel,
       wardNumber: selectedWardNumber,
-      wardName: matchedWard ? matchedWard.name : `Ward ${selectedWardNumber}`,
+      wardCode: wardCode,
+      wardName: matchedWard ? matchedWard.name : `Lakshmeshwar Ward No. ${selectedWardNumber}`,
+      isSpecificLandmark: selectedLandmark !== null,
     });
     onClose();
   };
@@ -292,6 +375,16 @@ export const MunicipalMapPickerModal: React.FC<MunicipalMapPickerModalProps> = (
       lm.wardName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       `ward ${lm.wardNumber}`.includes(searchQuery.toLowerCase())
   );
+
+  // Filtered wards for quick ward jumping in search
+  const matchingWards = searchQuery.trim()
+    ? wardsData.filter(
+        (w) =>
+          `ward ${w.wardNumber}`.includes(searchQuery.toLowerCase()) ||
+          w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          `ward ${String(w.wardNumber).padStart(2, "0")}`.includes(searchQuery.toLowerCase())
+      )
+    : [];
 
   return (
     <div
@@ -596,6 +689,31 @@ export const MunicipalMapPickerModal: React.FC<MunicipalMapPickerModalProps> = (
                   </button>
                 );
               })}
+
+              {matchingWards.length > 0 && (
+                <div className="col-span-full pt-1">
+                  <p className="text-[11px] font-bold text-teal-800 dark:text-teal-300 mb-1">
+                    Matching Ward Jurisdictions:
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {matchingWards.map((w) => (
+                      <button
+                        key={w.wardNumber}
+                        type="button"
+                        onClick={() => handleSelectWardFromSearch(w.wardNumber)}
+                        className={`text-left p-2 rounded-lg border text-xs transition flex items-center justify-between ${
+                          selectedWardNumber === w.wardNumber && !selectedLandmark
+                            ? "bg-teal-100 dark:bg-teal-900 border-[#064E4A] font-bold"
+                            : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-100"
+                        }`}
+                      >
+                        <span className="truncate">Ward {w.wardNumber} - {w.name}</span>
+                        <span className="text-[10px] text-teal-700 dark:text-teal-300 font-semibold ml-1">Select</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

@@ -6,7 +6,11 @@ import { useRouter } from "next/navigation";
 import { PageContainer } from "@/components/UI/PageContainer";
 import { useAuth } from "@/context/AuthContext";
 import { wardsData } from "@/data/wards";
-import { MunicipalMapPickerModal } from "@/components/Complaints/MunicipalMapPickerModal";
+import {
+  MunicipalMapPickerModal,
+  MunicipalLocationSelectedData,
+  normalizeWardValue,
+} from "@/components/Complaints/MunicipalMapPickerModal";
 import {
   FileText,
   AlertCircle,
@@ -264,8 +268,8 @@ export default function NewComplaintPage() {
   useEffect(() => {
     if (citizen) {
       if (!selectedWard && citizen.wardNumber) {
-        // Match existing ward format if needed
-        setSelectedWard(citizen.wardNumber);
+        // Match existing ward format with canonical normalization
+        setSelectedWard(normalizeWardValue(citizen.wardNumber));
       }
       if (!address && citizen.residentialAddress) {
         setAddress(citizen.residentialAddress);
@@ -326,7 +330,7 @@ export default function NewComplaintPage() {
         if (parsed.priority) setPriority(parsed.priority);
         if (parsed.title) setTitle(parsed.title);
         if (parsed.description) setDescription(parsed.description);
-        if (parsed.ward) setSelectedWard(parsed.ward);
+        if (parsed.ward) setSelectedWard(normalizeWardValue(parsed.ward));
         if (parsed.address) setAddress(parsed.address);
         if (parsed.latitude) setLatitude(parsed.latitude);
         if (parsed.longitude) setLongitude(parsed.longitude);
@@ -429,26 +433,88 @@ export default function NewComplaintPage() {
     setSelectedLandmarkName(null);
   };
 
-  const handleMapLocationSelected = (data: {
-    latitude: number;
-    longitude: number;
-    landmarkName: string;
-    wardNumber?: number;
-    wardName?: string;
-  }) => {
+  const handleMapLocationSelected = (
+    data:
+      | MunicipalLocationSelectedData
+      | {
+          latitude: number;
+          longitude: number;
+          landmarkName: string;
+          wardNumber?: number;
+          wardCode?: string;
+          wardName?: string;
+          isSpecificLandmark?: boolean;
+        }
+  ) => {
     setLatitude(data.latitude);
     setLongitude(data.longitude);
     setLocationAccuracy(20); // 20m municipal GIS pin precision
     setLocationCaptured(true);
     setLocationMethod("map");
     setLocationError(null);
-    setSelectedLandmarkName(data.landmarkName);
-    setLocationStatus(`Municipal GIS Pin: ${data.landmarkName}`);
-    if (data.wardName) {
-      setSelectedWard(data.wardName);
+
+    // 1. Resolve and synchronize Ward Jurisdiction to canonical "Ward XX" format
+    const targetWardCode = normalizeWardValue(
+      ("wardCode" in data && data.wardCode) || data.wardNumber || data.wardName
+    );
+    if (targetWardCode) {
+      setSelectedWard(targetWardCode);
+      if (errors.ward) {
+        setErrors((prev) => {
+          const rest = { ...prev };
+          delete rest.ward;
+          return rest;
+        });
+      }
     }
-    if (!address || address.trim().length === 0) {
+
+    // 2. Resolve Incident Location / Landmark and maintain consistency with Location Card
+    const isSpecific = Boolean(data.isSpecificLandmark);
+    const existingAddress = address ? address.trim() : "";
+    const isGenericAddress =
+      !existingAddress ||
+      existingAddress.toLowerCase().startsWith("pin location near") ||
+      existingAddress.toLowerCase().startsWith("near ward");
+
+    if (isSpecific) {
+      // Official landmark chosen: synchronize both field and location card with canonical landmark name
       setAddress(data.landmarkName);
+      setSelectedLandmarkName(data.landmarkName);
+      setLocationStatus(`Municipal GIS Landmark: ${data.landmarkName}`);
+      if (errors.address) {
+        setErrors((prev) => {
+          const rest = { ...prev };
+          delete rest.address;
+          return rest;
+        });
+      }
+    } else {
+      // Arbitrary point selected on map (coordinates only)
+      if (existingAddress && !isGenericAddress) {
+        // Citizen already manually entered a custom landmark/address (e.g. "laxmi nagar, laxmeshwar")
+        // Do NOT overwrite citizen's manually entered landmark!
+        // Keep the location card consistent with citizen's landmark + map pin tag
+        const cardLabel = targetWardCode
+          ? `${existingAddress} (${targetWardCode} Map Pin)`
+          : `${existingAddress} (Municipal Map Pin)`;
+        setSelectedLandmarkName(cardLabel);
+        setLocationStatus(`Municipal GIS Pin tagged for ${existingAddress}`);
+      } else {
+        // Address was empty or generic placeholder: set appropriately
+        const pinAddress =
+          data.landmarkName ||
+          `Near ${targetWardCode || "Ward"}, Lakshmeshwar Municipal Area`;
+        setAddress(pinAddress);
+        setSelectedLandmarkName(pinAddress);
+        setLocationStatus(`Municipal GIS Pin: ${pinAddress}`);
+        if (errors.address) {
+          setErrors((prev) => {
+            const rest = { ...prev };
+            delete rest.address;
+            return rest;
+          });
+        }
+      }
     }
   };
 
@@ -1140,7 +1206,13 @@ Citizen Impact: The issue is causing persistent inconvenience and requires on-si
                     id="complaint-ward"
                     value={selectedWard}
                     onChange={(e) => {
-                      setSelectedWard(e.target.value);
+                      const newWard = e.target.value;
+                      setSelectedWard(newWard);
+                      // If on a map pin with a manual address, update card ward tag
+                      if (locationCaptured && locationMethod === "map" && address.trim()) {
+                        const wardTag = newWard ? ` (${newWard} Map Pin)` : " (Municipal Map Pin)";
+                        setSelectedLandmarkName(`${address.trim()}${wardTag}`);
+                      }
                       if (errors.ward) {
                         setErrors((prev) => {
                           const rest = { ...prev };
@@ -1183,7 +1255,21 @@ Citizen Impact: The issue is causing persistent inconvenience and requires on-si
                     type="text"
                     value={address}
                     onChange={(e) => {
-                      setAddress(e.target.value);
+                      const newAddress = e.target.value;
+                      setAddress(newAddress);
+                      // If a map pin is active, keep the location card label consistent with the citizen's edited text
+                      if (locationCaptured && locationMethod === "map") {
+                        if (newAddress.trim()) {
+                          const wardTag = selectedWard ? ` (${selectedWard} Map Pin)` : " (Municipal Map Pin)";
+                          setSelectedLandmarkName(`${newAddress.trim()}${wardTag}`);
+                        } else {
+                          setSelectedLandmarkName(
+                            selectedWard
+                              ? `Pin Location near ${selectedWard}, Lakshmeshwar`
+                              : "Lakshmeshwar Municipal GIS Pin"
+                          );
+                        }
+                      }
                       if (errors.address) {
                         setErrors((prev) => {
                           const rest = { ...prev };

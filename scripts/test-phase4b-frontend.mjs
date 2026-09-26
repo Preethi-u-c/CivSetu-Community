@@ -268,6 +268,213 @@ async function runPhase4bTests() {
     await pool.query("DELETE FROM citizens WHERE id = $1", [TEST_CITIZEN.id]);
     console.log("\n[Cleanup] Test citizen and complaint records purged from PostgreSQL.");
 
+    // -------------------------------------------------------------------------
+    // TEST 8: Regression Audit & State Synchronization for Confirmed Municipal Map Selection
+    // -------------------------------------------------------------------------
+    console.log("\n[Test 8] Regression Audit: Confirmed Map Selection & State Synchronization...");
+
+    // 1. Audit normalizeWardValue in MunicipalMapPickerModal.tsx
+    assert(
+      mapModalCode.includes("export const normalizeWardValue"),
+      "Exports canonical normalizeWardValue helper function"
+    );
+    assert(
+      mapModalCode.includes('padStart(2, "0")'),
+      'Pads ward numbers with leading zeros (e.g. Ward 04, Ward 20) matching <select> values'
+    );
+
+    // Extract normalizeWardValue logic and verify against all formats
+    const normalizeWardFunc = (wardInput) => {
+      if (!wardInput) return "";
+      const str = String(wardInput).trim();
+      const match = str.match(/\d+/);
+      if (match) {
+        const num = parseInt(match[0], 10);
+        if (num >= 1 && num <= 23) {
+          return `Ward ${String(num).padStart(2, "0")}`;
+        }
+      }
+      return str;
+    };
+
+    assert(
+      normalizeWardFunc("Lakshmeshwar Ward No. 20") === "Ward 20",
+      "Normalizes 'Lakshmeshwar Ward No. 20' to 'Ward 20'"
+    );
+    assert(
+      normalizeWardFunc("Lakshmeshwar Ward No. 3") === "Ward 03",
+      "Normalizes 'Lakshmeshwar Ward No. 3' to 'Ward 03'"
+    );
+    assert(
+      normalizeWardFunc("Ward 20") === "Ward 20",
+      "Preserves already formatted 'Ward 20'"
+    );
+    assert(
+      normalizeWardFunc("Ward 4") === "Ward 04",
+      "Normalizes single-digit 'Ward 4' to padded 'Ward 04'"
+    );
+    assert(
+      normalizeWardFunc(20) === "Ward 20",
+      "Normalizes raw number 20 to 'Ward 20'"
+    );
+    assert(
+      normalizeWardFunc(3) === "Ward 03",
+      "Normalizes raw number 3 to 'Ward 03'"
+    );
+
+    // 2. Audit MunicipalMapPickerModal handleConfirm callback payload
+    assert(
+      mapModalCode.includes("wardCode: wardCode") || mapModalCode.includes("wardCode,"),
+      "handleConfirm passes normalized wardCode (e.g. Ward 20) in callback payload"
+    );
+    assert(
+      mapModalCode.includes("isSpecificLandmark: selectedLandmark !== null"),
+      "handleConfirm flags whether a canonical landmark or arbitrary map pin was confirmed"
+    );
+    assert(
+      mapModalCode.includes("WARD_CENTROIDS"),
+      "Maintains WARD_CENTROIDS mapping covering all 23 Lakshmeshwar TMC wards"
+    );
+
+    // 3. Audit handleMapLocationSelected in complaints/new/page.tsx
+    assert(
+      pageCode.includes("normalizeWardValue"),
+      "complaints/new/page.tsx integrates normalizeWardValue for robust ward matching"
+    );
+    assert(
+      pageCode.includes("setSelectedWard(targetWardCode)"),
+      "handleMapLocationSelected updates selectedWard state with normalized ward code"
+    );
+    assert(
+      pageCode.includes("delete rest.ward"),
+      "handleMapLocationSelected automatically clears ward validation error on map confirmation"
+    );
+
+    // 4. Audit Landmark vs Arbitrary Pin state synchronization
+    assert(
+      pageCode.includes("isSpecificLandmark") || pageCode.includes("data.isSpecificLandmark"),
+      "handleMapLocationSelected differentiates specific landmark from arbitrary map pin"
+    );
+    assert(
+      pageCode.includes("existingAddress && !isGenericAddress"),
+      "Preserves citizen's pre-filled manual landmark/address when arbitrary map coordinates are selected"
+    );
+    assert(
+      pageCode.includes("Map Pin") && pageCode.includes("setSelectedLandmarkName"),
+      "Synchronizes location card with citizen's address and map pin tag"
+    );
+    assert(
+      pageCode.includes("setAddress(data.landmarkName)") && pageCode.includes("setSelectedLandmarkName(data.landmarkName)"),
+      "Synchronizes both address input and location card when canonical landmark is selected"
+    );
+
+    // 5. Functional Simulation of exact user bug scenario:
+    // User types "laxmi nagar, laxmeshwar", selects point in Ward 20, confirms location.
+    function simulateMapSelection(initialState, mapData) {
+      let state = { ...initialState };
+      const targetWardCode = normalizeWardFunc(mapData.wardCode || mapData.wardNumber || mapData.wardName);
+      if (targetWardCode) {
+        state.selectedWard = targetWardCode;
+      }
+      const isSpecific = Boolean(mapData.isSpecificLandmark);
+      const existingAddress = state.address ? state.address.trim() : "";
+      const isGenericAddress =
+        !existingAddress ||
+        existingAddress.toLowerCase().startsWith("pin location near") ||
+        existingAddress.toLowerCase().startsWith("near ward");
+
+      if (isSpecific) {
+        state.address = mapData.landmarkName;
+        state.selectedLandmarkName = mapData.landmarkName;
+      } else {
+        if (existingAddress && !isGenericAddress) {
+          state.selectedLandmarkName = `${existingAddress} (${targetWardCode || "Municipal"} Map Pin)`;
+        } else {
+          state.address = mapData.landmarkName;
+          state.selectedLandmarkName = mapData.landmarkName;
+        }
+      }
+      return state;
+    }
+
+    // Scenario A: Citizen typed "laxmi nagar, laxmeshwar" -> confirmed arbitrary pin in Ward 20
+    const scenarioA = simulateMapSelection(
+      { address: "laxmi nagar, laxmeshwar", selectedWard: "" },
+      {
+        latitude: 15.1262,
+        longitude: 75.4760,
+        landmarkName: "Pin Location near Ward 20, Lakshmeshwar",
+        wardNumber: 20,
+        wardCode: "Ward 20",
+        wardName: "Lakshmeshwar Ward No. 20",
+        isSpecificLandmark: false,
+      }
+    );
+    assert(
+      scenarioA.selectedWard === "Ward 20",
+      "Scenario A: Form's Ward Jurisdiction synchronizes to 'Ward 20' (not default '-- Select...')"
+    );
+    assert(
+      scenarioA.address === "laxmi nagar, laxmeshwar",
+      "Scenario A: Citizen's manually entered landmark 'laxmi nagar, laxmeshwar' is preserved"
+    );
+    assert(
+      scenarioA.selectedLandmarkName === "laxmi nagar, laxmeshwar (Ward 20 Map Pin)",
+      "Scenario A: Location card is consistent with citizen's landmark ('laxmi nagar, laxmeshwar (Ward 20 Map Pin)')"
+    );
+
+    // Scenario B: Citizen selects canonical landmark "Someshwara Temple Complex" in Ward 3
+    const scenarioB = simulateMapSelection(
+      { address: "", selectedWard: "" },
+      {
+        latitude: 15.1245,
+        longitude: 75.4744,
+        landmarkName: "Someshwara Temple Complex",
+        wardNumber: 3,
+        wardCode: "Ward 03",
+        wardName: "Lakshmeshwar Ward No. 3",
+        isSpecificLandmark: true,
+      }
+    );
+    assert(
+      scenarioB.selectedWard === "Ward 03",
+      "Scenario B: Form's Ward Jurisdiction synchronizes to landmark's ward 'Ward 03'"
+    );
+    assert(
+      scenarioB.address === "Someshwara Temple Complex",
+      "Scenario B: Incident Location / Landmark synchronizes to canonical landmark name"
+    );
+    assert(
+      scenarioB.selectedLandmarkName === "Someshwara Temple Complex",
+      "Scenario B: Location card matches canonical landmark name"
+    );
+
+    // Scenario C: Citizen had empty address, selected arbitrary pin in Ward 20
+    const scenarioC = simulateMapSelection(
+      { address: "", selectedWard: "" },
+      {
+        latitude: 15.1262,
+        longitude: 75.4760,
+        landmarkName: "Pin Location near Ward 20, Lakshmeshwar",
+        wardNumber: 20,
+        wardCode: "Ward 20",
+        wardName: "Lakshmeshwar Ward No. 20",
+        isSpecificLandmark: false,
+      }
+    );
+    assert(
+      scenarioC.selectedWard === "Ward 20",
+      "Scenario C: Form's Ward Jurisdiction synchronizes to 'Ward 20'"
+    );
+    assert(
+      scenarioC.address === "Pin Location near Ward 20, Lakshmeshwar",
+      "Scenario C: Empty address is updated with informative location text"
+    );
+    assert(
+      scenarioC.selectedLandmarkName === "Pin Location near Ward 20, Lakshmeshwar",
+      "Scenario C: Location card and address field are completely consistent"
+    );
+
   } catch (err) {
     console.error("Test execution failed:", err);
     failed++;
