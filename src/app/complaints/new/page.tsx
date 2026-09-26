@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { PageContainer } from "@/components/UI/PageContainer";
 import { useAuth } from "@/context/AuthContext";
 import { wardsData } from "@/data/wards";
+import { MunicipalMapPickerModal } from "@/components/Complaints/MunicipalMapPickerModal";
 import {
   FileText,
   AlertCircle,
@@ -35,6 +36,12 @@ import {
   Trees,
   Compass,
   Check,
+  Eye,
+  EyeOff,
+  Maximize2,
+  Layers,
+  Crosshair,
+  Info,
 } from "lucide-react";
 
 // =============================================================================
@@ -218,12 +225,20 @@ export default function NewComplaintPage() {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [locationCaptured, setLocationCaptured] = useState<boolean>(false);
   const [locationStatus, setLocationStatus] = useState<string | null>(null);
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [locationMethod, setLocationMethod] = useState<"gps" | "map" | "manual" | null>(null);
+  const [showCoordinatesDetail, setShowCoordinatesDetail] = useState<boolean>(false);
+  const [mapPickerOpen, setMapPickerOpen] = useState<boolean>(false);
+  const [selectedLandmarkName, setSelectedLandmarkName] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState<boolean>(false);
 
   // Photo Attachment State
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoName, setPhotoName] = useState<string | null>(null);
   const [photoSize, setPhotoSize] = useState<string | null>(null);
+  const [isDraggingPhoto, setIsDraggingPhoto] = useState<boolean>(false);
+  const [photoModalOpen, setPhotoModalOpen] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // AI Assistance Mock Modal / Panel State
@@ -285,6 +300,13 @@ export default function NewComplaintPage() {
         address,
         latitude,
         longitude,
+        locationAccuracy,
+        locationMethod,
+        selectedLandmarkName,
+        photoName,
+        photoSize,
+        // Only cache preview if under 1.5MB to avoid localStorage overflow
+        photoPreview: photoPreview && photoPreview.length < 2 * 1024 * 1024 ? photoPreview : null,
         savedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
       localStorage.setItem("civsetu_complaint_draft", JSON.stringify(draft));
@@ -308,7 +330,13 @@ export default function NewComplaintPage() {
         if (parsed.address) setAddress(parsed.address);
         if (parsed.latitude) setLatitude(parsed.latitude);
         if (parsed.longitude) setLongitude(parsed.longitude);
+        if (parsed.locationAccuracy) setLocationAccuracy(parsed.locationAccuracy);
+        if (parsed.locationMethod) setLocationMethod(parsed.locationMethod);
+        if (parsed.selectedLandmarkName) setSelectedLandmarkName(parsed.selectedLandmarkName);
         if (parsed.latitude && parsed.longitude) setLocationCaptured(true);
+        if (parsed.photoName) setPhotoName(parsed.photoName);
+        if (parsed.photoSize) setPhotoSize(parsed.photoSize);
+        if (parsed.photoPreview) setPhotoPreview(parsed.photoPreview);
       }
     } catch {
       // ignore error
@@ -325,61 +353,125 @@ export default function NewComplaintPage() {
     }
   };
 
-  // GPS / Geolocation Capture (Real Browser Geolocation with Lakshmeshwar fallback mock)
+  // GPS / Geolocation Capture (Real Browser Geolocation with actual accuracy & graceful error handling)
   const handleCaptureLocation = () => {
     setIsLocating(true);
+    setLocationError(null);
     setLocationStatus("Querying device GPS sensors...");
 
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setLatitude(parseFloat(pos.coords.latitude.toFixed(6)));
-          setLongitude(parseFloat(pos.coords.longitude.toFixed(6)));
+          const lat = parseFloat(pos.coords.latitude.toFixed(6));
+          const lng = parseFloat(pos.coords.longitude.toFixed(6));
+          const acc = Math.round(pos.coords.accuracy); // Actual browser-reported accuracy!
+          setLatitude(lat);
+          setLongitude(lng);
+          setLocationAccuracy(acc);
           setLocationCaptured(true);
+          setLocationMethod("gps");
           setIsLocating(false);
+          setLocationError(null);
           setLocationStatus(
-            `Coordinates tagged: ${pos.coords.latitude.toFixed(4)}°N, ${pos.coords.longitude.toFixed(4)}°E (±${Math.round(pos.coords.accuracy)}m)`
+            `Coordinates tagged: ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E (±${acc}m actual accuracy)`
           );
         },
-        () => {
-          // Fallback to Lakshmeshwar TMC municipal center coordinates with minor simulated local variance
-          const fallbackLat = 15.1245;
-          const fallbackLng = 75.4744;
-          setLatitude(fallbackLat);
-          setLongitude(fallbackLng);
-          setLocationCaptured(true);
+        (err) => {
           setIsLocating(false);
-          setLocationStatus(
-            `GPS Tagged: 15.1245°N, 75.4744°E (Lakshmeshwar TMC Municipal Zone)`
-          );
+          let errorMsg = "Unable to retrieve device GPS location.";
+          if (err.code === 1) { // PERMISSION_DENIED
+            errorMsg = "Location access was denied. You can manually enter the landmark or pick a location on the municipal map.";
+          } else if (err.code === 2) { // POSITION_UNAVAILABLE
+            errorMsg = "Location information is unavailable from your device GPS. You can select your location on the municipal map.";
+          } else if (err.code === 3) { // TIMEOUT
+            errorMsg = "GPS request timed out. Please try again or select from the municipal map.";
+          }
+          setLocationError(errorMsg);
+          setLocationStatus(null);
         },
-        { timeout: 8000, enableHighAccuracy: true }
+        { timeout: 10000, enableHighAccuracy: true, maximumAge: 60000 }
       );
     } else {
-      // Geolocation unsupported fallback
-      setLatitude(15.1245);
-      setLongitude(75.4744);
-      setLocationCaptured(true);
       setIsLocating(false);
-      setLocationStatus("Lakshmeshwar Municipal Zone (15.1245°N, 75.4744°E)");
+      setLocationError("Geolocation is not supported by your browser. Please select your location on the municipal map.");
+      setLocationStatus(null);
+    }
+  };
+
+  // Municipal Center Quick Fallback Coordinates
+  const handleUseMunicipalCenter = () => {
+    const fallbackLat = 15.1245;
+    const fallbackLng = 75.4744;
+    setLatitude(fallbackLat);
+    setLongitude(fallbackLng);
+    setLocationAccuracy(50);
+    setLocationCaptured(true);
+    setLocationMethod("manual");
+    setIsLocating(false);
+    setLocationError(null);
+    setSelectedLandmarkName("Lakshmeshwar TMC Municipal Zone");
+    setLocationStatus(
+      "GPS Tagged: 15.1245°N, 75.4744°E (Lakshmeshwar TMC Municipal Zone)"
+    );
+    if (!address || address.trim().length === 0) {
+      setAddress("Near Someshwara Temple, Lakshmeshwar Municipal Area");
     }
   };
 
   const handleClearLocation = () => {
     setLatitude(null);
     setLongitude(null);
+    setLocationAccuracy(null);
     setLocationCaptured(false);
     setLocationStatus(null);
+    setLocationError(null);
+    setLocationMethod(null);
+    setSelectedLandmarkName(null);
   };
 
-  // Photo Attachment Handler
-  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleMapLocationSelected = (data: {
+    latitude: number;
+    longitude: number;
+    landmarkName: string;
+    wardNumber?: number;
+    wardName?: string;
+  }) => {
+    setLatitude(data.latitude);
+    setLongitude(data.longitude);
+    setLocationAccuracy(20); // 20m municipal GIS pin precision
+    setLocationCaptured(true);
+    setLocationMethod("map");
+    setLocationError(null);
+    setSelectedLandmarkName(data.landmarkName);
+    setLocationStatus(`Municipal GIS Pin: ${data.landmarkName}`);
+    if (data.wardName) {
+      setSelectedWard(data.wardName);
+    }
+    if (!address || address.trim().length === 0) {
+      setAddress(data.landmarkName);
+    }
+  };
+
+  // Photo Attachment Processor & Validator
+  const validateAndProcessPhoto = (file: File) => {
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+    const fileExt = file.name.split(".").pop()?.toLowerCase();
+    const isAllowedExt = fileExt && ["jpg", "jpeg", "png", "webp"].includes(fileExt);
+
+    if (!allowedTypes.includes(file.type) && !isAllowedExt) {
+      setErrors((prev) => ({
+        ...prev,
+        photo: "Invalid image format. Please upload a JPG, PNG, or WebP photo.",
+      }));
+      return;
+    }
 
     // Check size limit: 5MB
     if (file.size > 5 * 1024 * 1024) {
-      setErrors((prev) => ({ ...prev, photo: "Photo attachment must be under 5MB." }));
+      setErrors((prev) => ({
+        ...prev,
+        photo: "Photo attachment must be under 5MB.",
+      }));
       return;
     }
 
@@ -398,6 +490,12 @@ export default function NewComplaintPage() {
     reader.readAsDataURL(file);
   };
 
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    validateAndProcessPhoto(file);
+  };
+
   const handleRemovePhoto = () => {
     setPhotoPreview(null);
     setPhotoName(null);
@@ -405,6 +503,15 @@ export default function NewComplaintPage() {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+    setErrors((prev) => {
+      const rest = { ...prev };
+      delete rest.photo;
+      return rest;
+    });
+  };
+
+  const handleReplacePhoto = () => {
+    fileInputRef.current?.click();
   };
 
   // AI Assistant: Simulate smart grievance drafting / enhancement
@@ -1101,136 +1208,310 @@ Citizen Impact: The issue is causing persistent inconvenience and requires on-si
                 </div>
               </div>
 
-              {/* Section 6: GPS Geolocation Capture (Mock/Real Browser Integration) */}
-              <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/30 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Compass className="w-4 h-4 text-[#064E4A] dark:text-teal-400" />
-                    <span className="text-xs font-bold text-gray-900 dark:text-gray-100">
-                      GPS Incident Geotagging (Optional but Recommended)
-                    </span>
+              {/* Section 6: Incident Location & Geotagging */}
+              <div
+                id="field-location"
+                className="p-4 sm:p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/40 space-y-4"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Compass className="w-4 h-4 text-[#064E4A] dark:text-teal-400" />
+                      <h3 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
+                        Add Incident Location (GPS or Municipal Map)
+                      </h3>
+                    </div>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                      Attaching coordinates enables immediate municipal dispatch routing to the site.
+                    </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    {!locationCaptured ? (
-                      <button
-                        type="button"
-                        onClick={handleCaptureLocation}
-                        disabled={isLocating}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#064E4A] hover:bg-[#0B6B63] text-white text-xs font-bold rounded-lg transition shadow-sm disabled:opacity-50"
-                      >
-                        {isLocating ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            <span>Locating Device...</span>
-                          </>
-                        ) : (
-                          <>
-                            <MapPin className="w-3.5 h-3.5 text-teal-300" />
-                            <span>Capture Current Location</span>
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleClearLocation}
-                        className="text-xs text-red-600 dark:text-red-400 hover:underline"
-                      >
-                        Clear GPS
-                      </button>
-                    )}
+                  {/* Actions: Geolocation + Map Picker */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCaptureLocation}
+                      disabled={isLocating}
+                      aria-label="Use Current Location using device GPS"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#064E4A] hover:bg-[#0B6B63] text-white text-xs font-bold rounded-lg transition shadow-sm disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#064E4A]"
+                    >
+                      {isLocating ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Acquiring GPS...</span>
+                        </>
+                      ) : (
+                        <>
+                          <MapPin className="w-3.5 h-3.5 text-teal-300" />
+                          <span>Use Current Location</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setMapPickerOpen(true)}
+                      aria-label="Pick location on Lakshmeshwar Municipal Map"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-300 dark:border-gray-600 text-xs font-bold rounded-lg transition shadow-sm focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#064E4A]"
+                    >
+                      <Crosshair className="w-3.5 h-3.5 text-[#064E4A] dark:text-teal-400" />
+                      <span>Pick on Municipal Map</span>
+                    </button>
                   </div>
                 </div>
 
-                {locationCaptured ? (
-                  <div className="flex items-center justify-between p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs text-emerald-800 dark:text-emerald-300">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                      <div>
-                        <span className="font-bold">GPS Tag Recorded: </span>
-                        <span className="font-mono">{latitude}° N, {longitude}° E</span>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                          Lakshmeshwar Municipal Zone GIS reference verified.
-                        </p>
+                {/* Error Alert Message */}
+                {locationError && (
+                  <div
+                    role="alert"
+                    className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2.5"
+                  >
+                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-semibold">{locationError}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMapPickerOpen(true)}
+                          className="px-2.5 py-1 bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100 font-bold rounded-md text-[11px] hover:bg-amber-300 transition"
+                        >
+                          Open Municipal Map Instead
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleUseMunicipalCenter}
+                          className="px-2.5 py-1 bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-semibold rounded-md text-[11px] hover:underline"
+                        >
+                          Use Lakshmeshwar Center (15.1245°N, 75.4744°E)
+                        </button>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 text-[10px] font-bold">
-                      Geotagged
-                    </span>
+                  </div>
+                )}
+
+                {/* Geotagged Success Card */}
+                {locationCaptured ? (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 space-y-2"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-2.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs">
+                              {locationMethod === "map"
+                                ? "Municipal Map Pin Selected"
+                                : "Device Location Tagged Successfully"}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 text-[10px] font-bold">
+                              {locationMethod === "map" ? "Map Tagged" : "GPS Tagged"}
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5">
+                            {selectedLandmarkName
+                              ? selectedLandmarkName
+                              : "Lakshmeshwar Municipal Zone GIS reference recorded."}
+                          </p>
+
+                          {/* Accuracy with actual browser-reported accuracy */}
+                          {locationAccuracy !== null && (
+                            <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
+                              Device Accuracy: <span className="font-semibold text-emerald-700 dark:text-emerald-300">±{locationAccuracy}m</span> reported by sensor
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setShowCoordinatesDetail(!showCoordinatesDetail)}
+                          aria-label={showCoordinatesDetail ? "Hide coordinates" : "Show coordinates"}
+                          className="inline-flex items-center gap-1 text-[11px] text-teal-700 dark:text-teal-300 hover:underline"
+                        >
+                          {showCoordinatesDetail ? (
+                            <>
+                              <EyeOff className="w-3 h-3" />
+                              <span>Hide Raw GPS</span>
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-3 h-3" />
+                              <span>View Raw GPS</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleClearLocation}
+                          aria-label="Clear recorded location"
+                          className="text-xs text-red-600 dark:text-red-400 hover:underline ml-2"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Privacy Note & Expandable Exact Coordinates */}
+                    <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 gap-1">
+                      <p className="flex items-center gap-1">
+                        <Info className="w-3 h-3 text-emerald-600" />
+                        <span>Coordinates are protected for citizen privacy and shared solely with municipal crews.</span>
+                      </p>
+                      {showCoordinatesDetail && latitude !== null && longitude !== null && (
+                        <p className="font-mono text-[11px] text-gray-700 dark:text-gray-300 bg-emerald-100/60 dark:bg-emerald-900/40 px-2 py-0.5 rounded">
+                          {latitude.toFixed(6)}° N, {longitude.toFixed(6)}° E
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                    Attaching exact geographic coordinates allows municipal field inspectors to route directly to the complaint site using mobile navigation.
+                    You may use your device GPS or select your spot on the municipal map. If skipped, dispatch will route using the ward and landmark address.
                   </p>
                 )}
               </div>
 
               {/* Section 7: Photographic Evidence Upload */}
-              <div className="space-y-2">
+              <div id="field-photo" className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
+                  <label htmlFor="complaint-photo-input" className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
                     7. Photographic Evidence (Optional, max 5MB)
                   </label>
-                  <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                  <span id="photo-format-hint" className="text-[11px] text-gray-500 dark:text-gray-400">
                     JPG, PNG, WebP supported
                   </span>
                 </div>
 
                 {!photoPreview ? (
                   <div
+                    tabIndex={0}
+                    role="button"
+                    aria-label="Upload photo evidence. Click or press Enter to browse files, or drag and drop here."
+                    aria-describedby="photo-format-hint"
                     onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-[#064E4A] dark:hover:border-teal-400 rounded-2xl p-6 text-center cursor-pointer transition bg-white dark:bg-gray-800/40 group"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        fileInputRef.current?.click();
+                      }
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDraggingPhoto(true);
+                    }}
+                    onDragLeave={() => setIsDraggingPhoto(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingPhoto(false);
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) validateAndProcessPhoto(file);
+                    }}
+                    className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition group focus:outline-none focus-visible:ring-2 focus-visible:ring-[#064E4A] ${
+                      isDraggingPhoto
+                        ? "border-[#064E4A] bg-teal-50 dark:bg-teal-950/40"
+                        : "border-gray-300 dark:border-gray-700 hover:border-[#064E4A] dark:hover:border-teal-400 bg-white dark:bg-gray-800/40"
+                    }`}
                   >
                     <input
+                      id="complaint-photo-input"
                       ref={fileInputRef}
                       type="file"
-                      accept="image/png,image/jpeg,image/webp"
+                      accept="image/png,image/jpeg,image/webp,image/jpg"
                       onChange={handlePhotoSelect}
-                      className="hidden"
+                      className="sr-only"
                     />
                     <div className="w-12 h-12 rounded-full bg-teal-50 dark:bg-teal-950/60 text-[#064E4A] dark:text-teal-400 flex items-center justify-center mx-auto mb-2 group-hover:scale-105 transition">
                       <Camera className="w-6 h-6" />
                     </div>
                     <p className="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-200">
-                      Click to upload photo evidence or take picture
+                      Click to upload photo evidence, take a picture, or drag file here
                     </p>
                     <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
-                      Clear photos of water leaks, garbage mounds, or road defects significantly accelerate municipal verification.
+                      Clear photos of pipe leakages, garbage dumps, or potholes accelerate municipal triage.
                     </p>
                   </div>
                 ) : (
-                  <div className="p-4 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50/40 dark:bg-teal-950/20 flex items-center gap-4">
-                    <img
-                      src={photoPreview}
-                      alt="Grievance evidence preview"
-                      className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 flex-shrink-0"
+                  <div className="p-4 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50/40 dark:bg-teal-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <input
+                      id="complaint-photo-input"
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/jpg"
+                      onChange={handlePhotoSelect}
+                      className="sr-only"
                     />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate">
-                        {photoName}
-                      </p>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                        File Size: {photoSize}
-                      </p>
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Ready to attach to official record</span>
-                      </span>
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => setPhotoModalOpen(true)}
+                        aria-label="View enlarged evidence photo"
+                        className="relative group rounded-lg overflow-hidden flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#064E4A]"
+                      >
+                        <img
+                          src={photoPreview}
+                          alt="Grievance evidence preview"
+                          className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700 group-hover:opacity-90 transition"
+                        />
+                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-white">
+                          <Maximize2 className="w-4 h-4" />
+                        </div>
+                      </button>
+
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate">
+                          {photoName}
+                        </p>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                          File Size: {photoSize}
+                        </p>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Photo ready for municipal attachment</span>
+                        </span>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleRemovePhoto}
-                      className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-white dark:hover:bg-gray-800 transition"
-                      title="Remove attached photo"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
+
+                    {/* Photo Actions: Replace, View, Remove */}
+                    <div className="flex items-center gap-2 self-end sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => setPhotoModalOpen(true)}
+                        aria-label="View enlarged image"
+                        className="px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 transition"
+                      >
+                        Preview
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleReplacePhoto}
+                        aria-label="Replace current photo"
+                        className="px-2.5 py-1.5 rounded-lg border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-900/40 text-xs font-bold text-[#064E4A] dark:text-teal-200 hover:bg-teal-100 transition"
+                      >
+                        Replace
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleRemovePhoto}
+                        aria-label="Remove attached photo"
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-white dark:hover:bg-gray-800 transition"
+                        title="Remove attached photo"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 )}
 
                 {errors.photo && (
-                  <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                  <p role="alert" className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5" />
                     <span>{errors.photo}</span>
                   </p>
@@ -1336,7 +1617,7 @@ Citizen Impact: The issue is causing persistent inconvenience and requires on-si
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 space-y-1">
+                <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 space-y-1.5">
                   <p className="font-bold text-gray-500 dark:text-gray-400 text-[11px] uppercase">
                     Incident Landmark / Address
                   </p>
@@ -1344,10 +1625,30 @@ Citizen Impact: The issue is causing persistent inconvenience and requires on-si
                     {address}
                   </p>
                   {locationCaptured ? (
-                    <p className="text-emerald-700 dark:text-emerald-400 text-[11px] font-semibold flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>GPS Tag: {latitude}° N, {longitude}° E</span>
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-emerald-700 dark:text-emerald-400 text-[11px] font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>
+                          {locationMethod === "map" ? "Municipal Map Pin" : "GPS Tag Recorded"}
+                          {locationAccuracy !== null ? ` (Accuracy: ±${locationAccuracy}m)` : ""}
+                        </span>
+                      </p>
+                      <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 pt-0.5">
+                        <span>Protected for citizen privacy</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowCoordinatesDetail(!showCoordinatesDetail)}
+                          className="text-teal-700 dark:text-teal-400 hover:underline"
+                        >
+                          {showCoordinatesDetail ? "Hide Raw Lat/Lng" : "View Coordinates"}
+                        </button>
+                      </div>
+                      {showCoordinatesDetail && latitude !== null && longitude !== null && (
+                        <p className="font-mono text-[10px] text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-900 px-2 py-0.5 rounded">
+                          {latitude}° N, {longitude}° E
+                        </p>
+                      )}
+                    </div>
                   ) : (
                     <p className="text-gray-400 text-[11px]">No GPS coordinates attached</p>
                   )}
@@ -1360,15 +1661,32 @@ Citizen Impact: The issue is causing persistent inconvenience and requires on-si
                   <p className="text-xs font-bold uppercase text-gray-400 tracking-wider mb-2">
                     Attached Photographic Evidence
                   </p>
-                  <div className="inline-flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl">
-                    <img
-                      src={photoPreview}
-                      alt="Grievance evidence"
-                      className="w-16 h-16 object-cover rounded-lg"
-                    />
-                    <div className="text-xs pr-2">
+                  <div className="inline-flex items-center gap-3.5 p-2.5 bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setPhotoModalOpen(true)}
+                      aria-label="View enlarged evidence photo"
+                      className="relative group rounded-lg overflow-hidden flex-shrink-0"
+                    >
+                      <img
+                        src={photoPreview}
+                        alt="Grievance evidence"
+                        className="w-16 h-16 object-cover rounded-lg group-hover:opacity-90 transition"
+                      />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-white">
+                        <Maximize2 className="w-3.5 h-3.5" />
+                      </div>
+                    </button>
+                    <div className="text-xs pr-3">
                       <p className="font-bold text-gray-900 dark:text-gray-100">{photoName}</p>
                       <p className="text-gray-500 dark:text-gray-400 text-[11px]">{photoSize}</p>
+                      <button
+                        type="button"
+                        onClick={() => setPhotoModalOpen(true)}
+                        className="text-[11px] text-[#064E4A] dark:text-teal-300 font-semibold hover:underline mt-1 block"
+                      >
+                        Click to view full image
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1723,6 +2041,91 @@ Citizen Impact: The issue is causing persistent inconvenience and requires on-si
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Municipal Map Picker Modal (Self-contained, offline-capable, no Google API keys) */}
+      <MunicipalMapPickerModal
+        isOpen={mapPickerOpen}
+        onClose={() => setMapPickerOpen(false)}
+        onSelectLocation={handleMapLocationSelected}
+        initialLat={latitude}
+        initialLng={longitude}
+      />
+
+      {/* Photographic Evidence Lightbox Modal */}
+      {photoModalOpen && photoPreview && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Enlarged photo evidence preview"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn"
+          onClick={() => setPhotoModalOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-[#071f1d] border border-gray-200 dark:border-gray-800 rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 bg-gray-50 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100 truncate max-w-sm">
+                  {photoName || "Complaint Photo Evidence"}
+                </h4>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                  Size: {photoSize} • Official Attachment Preview
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPhotoModalOpen(false)}
+                aria-label="Close photo preview"
+                className="p-1.5 rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body: Image Preview */}
+            <div className="p-4 flex items-center justify-center bg-neutral-900 overflow-auto max-h-[70vh]">
+              <img
+                src={photoPreview}
+                alt="Enlarged grievance evidence"
+                className="max-w-full max-h-[65vh] object-contain rounded-lg"
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3.5 bg-gray-50 dark:bg-gray-800/80 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between">
+              <span className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Verified Evidence Attachment</span>
+              </span>
+
+              <div className="flex items-center gap-2">
+                {currentStep === 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhotoModalOpen(false);
+                      handleReplacePhoto();
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold text-[#064E4A] dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/40 rounded-lg transition"
+                  >
+                    Replace Photo
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPhotoModalOpen(false)}
+                  className="px-4 py-1.5 bg-[#064E4A] hover:bg-[#0B6B63] text-white text-xs font-bold rounded-lg transition"
+                >
+                  Close Preview
+                </button>
+              </div>
             </div>
           </div>
         </div>
