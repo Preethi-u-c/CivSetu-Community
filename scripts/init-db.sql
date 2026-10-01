@@ -168,3 +168,85 @@ CREATE INDEX IF NOT EXISTS idx_notices_publish_date ON notices(publish_date DESC
 CREATE INDEX IF NOT EXISTS idx_notices_is_emergency ON notices(is_emergency);
 CREATE INDEX IF NOT EXISTS idx_notices_category ON notices(category);
 
+-- =============================================================================
+-- PHASE 6: ADMIN PORTAL TABLES
+-- =============================================================================
+
+-- 10. ADMIN USERS TABLE
+CREATE TABLE IF NOT EXISTS admin_users (
+    id VARCHAR(64) PRIMARY KEY,
+    username VARCHAR(64) NOT NULL UNIQUE,
+    full_name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(32) NOT NULL DEFAULT 'SYSTEM_ADMIN',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_email ON admin_users(email);
+CREATE INDEX IF NOT EXISTS idx_admin_username ON admin_users(username);
+
+-- 11. ADMIN SESSIONS TABLE
+CREATE TABLE IF NOT EXISTS admin_sessions (
+    id VARCHAR(64) PRIMARY KEY,
+    admin_id VARCHAR(64) NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_id ON admin_sessions(admin_id);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
+
+-- 12. WARDS TABLE
+CREATE TABLE IF NOT EXISTS wards (
+    ward_number INT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    population INT NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+-- 13. COMPLAINT CATEGORIES TABLE
+CREATE TABLE IF NOT EXISTS complaint_categories (
+    id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    department VARCHAR(255) NOT NULL,
+    description TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+-- 14. NOTICE CATEGORIES TABLE
+CREATE TABLE IF NOT EXISTS notice_categories (
+    id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+-- 15. ESCALATION SETTINGS TABLE
+CREATE TABLE IF NOT EXISTS escalation_settings (
+    tier_level VARCHAR(64) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    target_authority VARCHAR(255) NOT NULL,
+    sla_hours INT NOT NULL,
+    next_tier VARCHAR(64),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+-- 16. SYSTEM SETTINGS TABLE
+CREATE TABLE IF NOT EXISTS system_settings (
+    key VARCHAR(128) PRIMARY KEY,
+    value TEXT NOT NULL,
+    description TEXT,
+    category VARCHAR(64) NOT NULL DEFAULT 'general',
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);

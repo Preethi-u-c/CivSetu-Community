@@ -1,5 +1,6 @@
 import { Pool, QueryResultRow } from "pg";
 import crypto from "crypto";
+import { wardsData } from "@/data/wards";
 
 // =============================================================================
 // TypeScript Interfaces for Database Records
@@ -86,6 +87,72 @@ export interface NoticeRecord {
   issuedByName: string;
   issuedByDepartment: string;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminUserRecord {
+  id: string;
+  username: string;
+  fullName: string;
+  email: string;
+  passwordHash: string;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminSessionRecord {
+  id: string;
+  adminId: string;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
+export interface WardRecord {
+  wardNumber: number;
+  name: string;
+  population: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ComplaintCategoryRecord {
+  id: string;
+  name: string;
+  department: string;
+  description: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NoticeCategoryRecord {
+  id: string;
+  name: string;
+  description: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EscalationSettingRecord {
+  tierLevel: string;
+  title: string;
+  targetAuthority: string;
+  slaHours: number;
+  nextTier: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SystemSettingRecord {
+  key: string;
+  value: string;
+  description: string;
+  category: string;
   updatedAt: string;
 }
 
@@ -284,20 +351,94 @@ export async function ensurePostgresTables(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_notices_publish_date ON notices(publish_date DESC);
     CREATE INDEX IF NOT EXISTS idx_notices_is_emergency ON notices(is_emergency);
     CREATE INDEX IF NOT EXISTS idx_notices_category ON notices(category);
+
+    CREATE TABLE IF NOT EXISTS admin_users (
+        id VARCHAR(64) PRIMARY KEY,
+        username VARCHAR(64) NOT NULL UNIQUE,
+        full_name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        role VARCHAR(32) NOT NULL DEFAULT 'SYSTEM_ADMIN',
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_admin_email ON admin_users(email);
+    CREATE INDEX IF NOT EXISTS idx_admin_username ON admin_users(username);
+
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+        id VARCHAR(64) PRIMARY KEY,
+        admin_id VARCHAR(64) NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_admin_sessions_id ON admin_sessions(admin_id);
+    CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);
+
+    CREATE TABLE IF NOT EXISTS wards (
+        ward_number INT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        population INT NOT NULL DEFAULT 0,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS complaint_categories (
+        id VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        department VARCHAR(255) NOT NULL,
+        description TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS notice_categories (
+        id VARCHAR(64) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS escalation_settings (
+        tier_level VARCHAR(64) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        target_authority VARCHAR(255) NOT NULL,
+        sla_hours INT NOT NULL,
+        next_tier VARCHAR(64),
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS system_settings (
+        key VARCHAR(128) PRIMARY KEY,
+        value TEXT NOT NULL,
+        description TEXT,
+        category VARCHAR(64) NOT NULL DEFAULT 'general',
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
   `;
 
   await pool.query(ddl);
   await seedDefaultAuthorities(pool);
   await seedDefaultNotices(pool);
+  await seedDefaultAdmins(pool);
+  await seedDefaultWards(pool);
+  await seedDefaultComplaintCategories(pool);
+  await seedDefaultNoticeCategories(pool);
+  await seedDefaultEscalationSettings(pool);
+  await seedDefaultSystemSettings(pool);
   tablesInitialized = true;
 }
 
 async function seedDefaultAuthorities(pool: Pool) {
   try {
-    const countRes = await pool.query("SELECT COUNT(*) AS count FROM authority_users;");
-    const count = parseInt(countRes.rows[0]?.count || "0", 10);
-    if (count > 0) return;
-
     // Default password hash for 'Authority@Pass2026'
     const defaultPasswordHash = "$2b$10$r4VYCcVRhAzB2y2q88cGUeLDR.zRiIWdjJEbdLdcEAWiH5KSfr1GC";
 
@@ -348,6 +489,15 @@ async function seedDefaultAuthorities(pool: Pool) {
         mobileNumber: "9845056789",
       },
       {
+        id: "OFF-ZP-001",
+        fullName: "Sri. Mallikarjun Swamy",
+        designation: "Chief Executive Officer (CEO)",
+        department: "Gadag Zilla Panchayat",
+        authorityLevel: "District Panchayat",
+        email: "ceo.zp@gadag.nic.in",
+        mobileNumber: "9845078901",
+      },
+      {
         id: "OFF-DIST-001",
         fullName: "Dr. Priyadarshini Nayak",
         designation: "Deputy Commissioner & District Magistrate",
@@ -364,7 +514,7 @@ async function seedDefaultAuthorities(pool: Pool) {
           id, full_name, designation, department, authority_level,
           email, mobile_number, password_hash, is_active, created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-        ON CONFLICT (email) DO NOTHING;`,
+        ON CONFLICT (id) DO NOTHING;`,
         [
           off.id,
           off.fullName,
@@ -460,6 +610,313 @@ async function seedDefaultNotices(pool: Pool) {
     }
   } catch (err) {
     console.error("Warning: Failed to seed default notices:", err);
+  }
+}
+
+async function seedDefaultAdmins(pool: Pool) {
+  try {
+    // Development-only fallback hash (for local environment setup/testing).
+    // Production deployments must supply INITIAL_ADMIN_PASSWORD_HASH via environment variables.
+    const devFallbackHash = "$2b$10$CQ/q4id1DDctw5RttlEAJ.tjetruAk.KRVltwiHnRBo0p0MAUeepi";
+    const adminPasswordHash = process.env.INITIAL_ADMIN_PASSWORD_HASH || devFallbackHash;
+
+    const countRes = await pool.query("SELECT COUNT(*) AS count FROM admin_users;");
+    const count = parseInt(countRes.rows[0]?.count || "0", 10);
+    if (count > 0) {
+      // If an explicit environment password hash was supplied, ensure default admin record reflects it
+      if (process.env.INITIAL_ADMIN_PASSWORD_HASH) {
+        await pool.query(
+          "UPDATE admin_users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = 'ADM-LMC-001';",
+          [process.env.INITIAL_ADMIN_PASSWORD_HASH]
+        );
+      }
+      return;
+    }
+
+    await pool.query(
+      `INSERT INTO admin_users (
+        id, username, full_name, email, password_hash, role, is_active, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT (email) DO NOTHING;`,
+      [
+        "ADM-LMC-001",
+        "admin",
+        "System Administrator, Lakshmeshwar TMC",
+        "admin@lakshmeshwar-tmc.gov.in",
+        adminPasswordHash,
+        "SYSTEM_ADMIN",
+      ]
+    );
+  } catch (err) {
+    console.error("Warning: Failed to seed default admin:", err);
+  }
+}
+
+async function seedDefaultWards(pool: Pool) {
+  try {
+    const countRes = await pool.query("SELECT COUNT(*) AS count FROM wards;");
+    const count = parseInt(countRes.rows[0]?.count || "0", 10);
+    if (count > 0) return;
+
+    for (const w of wardsData) {
+      await pool.query(
+        `INSERT INTO wards (ward_number, name, population, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         ON CONFLICT (ward_number) DO NOTHING;`,
+        [w.wardNumber, w.name, w.population]
+      );
+    }
+  } catch (err) {
+    console.error("Warning: Failed to seed default wards:", err);
+  }
+}
+
+async function seedDefaultComplaintCategories(pool: Pool) {
+  try {
+    const countRes = await pool.query("SELECT COUNT(*) AS count FROM complaint_categories;");
+    const count = parseInt(countRes.rows[0]?.count || "0", 10);
+    if (count > 0) return;
+
+    const defaultCategories = [
+      {
+        id: "water",
+        name: "Water Supply & Metering",
+        department: "Water Supply & Maintenance Wing, Lakshmeshwar TMC",
+        description: "Pipeline leakages, low water pressure, contaminated supply, meter defects",
+      },
+      {
+        id: "sanitation",
+        name: "Solid Waste Management & Sanitation",
+        department: "Health & Solid Waste Management Section, Lakshmeshwar TMC",
+        description: "Garbage collection, overflowing community bins, open dumping, street sweeping",
+      },
+      {
+        id: "streetlighting",
+        name: "Street Lighting & Electrical",
+        department: "Electrical & Streetlighting Wing, Lakshmeshwar TMC",
+        description: "Defective streetlights, dark stretches, damaged poles, flickering fixtures",
+      },
+      {
+        id: "roads",
+        name: "Roads, Footpaths & Drainage",
+        department: "Public Works & Civil Engineering Wing, Lakshmeshwar TMC",
+        description: "Potholes, damaged footpaths, clogged stormwater drains, waterlogging",
+      },
+      {
+        id: "health",
+        name: "Public Health & Mosquito Control",
+        department: "Health & Solid Waste Management Section, Lakshmeshwar TMC",
+        description: "Stagnant water, mosquito fogging, stray animal management, food hygiene",
+      },
+      {
+        id: "revenue",
+        name: "Property Tax & Municipal Revenue",
+        department: "Revenue & Property Assessment Section, Lakshmeshwar TMC",
+        description: "Khata assessment issues, property tax receipts, municipal ownership verification",
+      },
+      {
+        id: "parks",
+        name: "Parks, Trees & Civic Amenities",
+        department: "Public Works & Civil Engineering Wing, Lakshmeshwar TMC",
+        description: "Overhanging tree branches, park cleanliness, public toilet maintenance",
+      },
+      {
+        id: "other",
+        name: "Other Municipal Grievances",
+        department: "Lakshmeshwar TMC Citizen Facilitation Centre",
+        description: "General civic issues, town planning, or unlisted municipal services",
+      },
+    ];
+
+    for (const c of defaultCategories) {
+      await pool.query(
+        `INSERT INTO complaint_categories (id, name, department, description, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         ON CONFLICT (id) DO NOTHING;`,
+        [c.id, c.name, c.department, c.description]
+      );
+    }
+  } catch (err) {
+    console.error("Warning: Failed to seed default complaint categories:", err);
+  }
+}
+
+async function seedDefaultNoticeCategories(pool: Pool) {
+  try {
+    const countRes = await pool.query("SELECT COUNT(*) AS count FROM notice_categories;");
+    const count = parseInt(countRes.rows[0]?.count || "0", 10);
+    if (count > 0) return;
+
+    const defaultCategories = [
+      {
+        id: "public_notice",
+        name: "Public Notice",
+        description: "General municipal announcements and citizen advisories",
+      },
+      {
+        id: "public_works",
+        name: "Public Works Directive",
+        description: "Infrastructure projects, road maintenance and developmental works",
+      },
+      {
+        id: "public_health",
+        name: "Public Health Order",
+        description: "Sanitation, public hygiene and disease prevention mandates",
+      },
+      {
+        id: "water_advisory",
+        name: "Water Supply Advisory",
+        description: "Water distribution schedules, maintenance interruptions, and quality notices",
+      },
+      {
+        id: "circular",
+        name: "General Circular",
+        description: "Administrative rules, tax notices, and regulatory guidelines",
+      },
+    ];
+
+    for (const c of defaultCategories) {
+      await pool.query(
+        `INSERT INTO notice_categories (id, name, description, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         ON CONFLICT (id) DO NOTHING;`,
+        [c.id, c.name, c.description]
+      );
+    }
+  } catch (err) {
+    console.error("Warning: Failed to seed default notice categories:", err);
+  }
+}
+
+async function seedDefaultEscalationSettings(pool: Pool) {
+  try {
+    const countRes = await pool.query("SELECT COUNT(*) AS count FROM escalation_settings;");
+    const count = parseInt(countRes.rows[0]?.count || "0", 10);
+    if (count > 0) return;
+
+    const defaultSettings = [
+      {
+        tierLevel: "Local Authority",
+        title: "Local Municipal Grievance Cell",
+        targetAuthority: "Lakshmeshwar Taluk Panchayat Executive Office",
+        slaHours: 48,
+        nextTier: "Block level",
+      },
+      {
+        tierLevel: "Block level",
+        title: "Taluk Panchayat Executive Oversight",
+        targetAuthority: "Gadag Zilla Panchayat Planning & Development Cell",
+        slaHours: 72,
+        nextTier: "District Panchayat",
+      },
+      {
+        tierLevel: "District Panchayat",
+        title: "Zilla Panchayat Appellate Desk",
+        targetAuthority: "District Urban Development Cell (DUDC), DC Office, Gadag",
+        slaHours: 96,
+        nextTier: "District Administration",
+      },
+      {
+        tierLevel: "District Administration",
+        title: "Deputy Commissioner & District Magistrate Final Authority",
+        targetAuthority: "Office of the Deputy Commissioner, Gadag District",
+        slaHours: 0,
+        nextTier: null,
+      },
+    ];
+
+    for (const s of defaultSettings) {
+      await pool.query(
+        `INSERT INTO escalation_settings (tier_level, title, target_authority, sla_hours, next_tier, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         ON CONFLICT (tier_level) DO NOTHING;`,
+        [s.tierLevel, s.title, s.targetAuthority, s.slaHours, s.nextTier]
+      );
+    }
+  } catch (err) {
+    console.error("Warning: Failed to seed default escalation settings:", err);
+  }
+}
+
+async function seedDefaultSystemSettings(pool: Pool) {
+  try {
+    const countRes = await pool.query("SELECT COUNT(*) AS count FROM system_settings;");
+    const count = parseInt(countRes.rows[0]?.count || "0", 10);
+    if (count > 0) return;
+
+    const defaultSettings = [
+      {
+        key: "municipality_name",
+        value: "Lakshmeshwar Town Municipal Council (ಪುರಸಭೆ ಲಕ್ಷ್ಮೇಶ್ವರ)",
+        description: "Official administrative title of the local government body",
+        category: "general",
+      },
+      {
+        key: "municipality_address",
+        value: "Town Municipal Council, Near KSRTC Bus Stand, Lakshmeshwar, Gadag District, Karnataka - 582116",
+        description: "Official headquarters physical address",
+        category: "general",
+      },
+      {
+        key: "contact_email",
+        value: "contact@lakshmeshwar-tmc.gov.in",
+        description: "Primary citizen grievance email contact",
+        category: "contact",
+      },
+      {
+        key: "contact_phone",
+        value: "+91 8378 262222",
+        description: "Direct administrative contact phone number",
+        category: "contact",
+      },
+      {
+        key: "helpline_number",
+        value: "1912 / 08378-262222",
+        description: "24x7 Municipal Citizen Emergency Helpline",
+        category: "contact",
+      },
+      {
+        key: "default_sla_hours",
+        value: "72",
+        description: "Standard statutory grievance resolution SLA in hours",
+        category: "sla",
+      },
+      {
+        key: "maintenance_mode",
+        value: "false",
+        description: "Portal maintenance lock state ('true' or 'false')",
+        category: "system",
+      },
+      {
+        key: "notifications_enabled",
+        value: "true",
+        description: "Global dispatch of citizen and authority system alerts",
+        category: "notifications",
+      },
+      {
+        key: "auto_escalation_enabled",
+        value: "true",
+        description: "Automatic escalation warning triggers on breached SLAs",
+        category: "sla",
+      },
+      {
+        key: "working_hours",
+        value: "Monday - Saturday: 10:00 AM - 05:30 PM (2nd & 4th Saturdays Holiday)",
+        description: "Official civic office operational timings",
+        category: "general",
+      },
+    ];
+
+    for (const s of defaultSettings) {
+      await pool.query(
+        `INSERT INTO system_settings (key, value, description, category, updated_at)
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+         ON CONFLICT (key) DO NOTHING;`,
+        [s.key, s.value, s.description, s.category]
+      );
+    }
+  } catch (err) {
+    console.error("Warning: Failed to seed default system settings:", err);
   }
 }
 
