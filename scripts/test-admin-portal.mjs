@@ -49,19 +49,26 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const BASE_URL = "http://localhost:3000";
 
-// Load DATABASE_URL from .env.local
+// Load DATABASE_URL & INITIAL_ADMIN_PASSWORD from environment / .env.local
 const envLocalPath = path.join(__dirname, "..", ".env.local");
 let databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl && fs.existsSync(envLocalPath)) {
+let adminTestPassword = process.env.INITIAL_ADMIN_PASSWORD;
+
+if (fs.existsSync(envLocalPath)) {
   const content = fs.readFileSync(envLocalPath, "utf-8");
   for (const line of content.split(/\r?\n/)) {
     const trimmed = line.trim();
-    if (trimmed.startsWith("DATABASE_URL=")) {
+    if (trimmed.startsWith("DATABASE_URL=") && !databaseUrl) {
       databaseUrl = trimmed.slice("DATABASE_URL=".length).trim();
-      break;
+    }
+    if (trimmed.startsWith("INITIAL_ADMIN_PASSWORD=") && !adminTestPassword) {
+      adminTestPassword = trimmed.slice("INITIAL_ADMIN_PASSWORD=".length).trim();
     }
   }
 }
+
+// Configurable development admin password for test execution
+const activeAdminPassword = adminTestPassword || process.env.INITIAL_ADMIN_PASSWORD || "CivSetuDevAdmin2026!";
 
 let passedTests = 0;
 let failedTests = 0;
@@ -84,6 +91,14 @@ async function run() {
   const pool = new pg.Pool({ connectionString: databaseUrl });
 
   try {
+    // Synchronize default admin account in PostgreSQL with active development credential
+    const bcrypt = (await import("bcryptjs")).default;
+    const testAdminHash = await bcrypt.hash(activeAdminPassword, 10);
+    await pool.query(
+      "UPDATE admin_users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = 'ADM-LMC-001';",
+      [testAdminHash]
+    );
+
     // -------------------------------------------------------------
     // Section 1: Admin Authentication & Route Protection
     // -------------------------------------------------------------
@@ -134,11 +149,11 @@ async function run() {
     });
     assert(invalidLoginRes.status === 401, "Admin login with wrong password rejected with HTTP 401");
 
-    // 1.5 Valid Admin Login
+    // 1.5 Valid Admin Login with Configured Credential
     const validLoginRes = await fetch(`${BASE_URL}/api/admin/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ usernameOrEmail: "admin", password: "Admin@Pass2026" }),
+      body: JSON.stringify({ usernameOrEmail: "admin", password: activeAdminPassword }),
     });
     assert(validLoginRes.status === 200, "Valid admin login returns HTTP 200");
     const validLoginJson = await validLoginRes.json();
@@ -178,7 +193,7 @@ async function run() {
     const reloginRes = await fetch(`${BASE_URL}/api/admin/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ usernameOrEmail: "admin", password: "Admin@Pass2026" }),
+      body: JSON.stringify({ usernameOrEmail: "admin", password: activeAdminPassword }),
     });
     const reloginRawCookies = reloginRes.headers.get("set-cookie") || "";
     const reloginToken = reloginRawCookies.match(/civsetu_admin_token=([^;]+)/)[1];

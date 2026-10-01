@@ -22,7 +22,9 @@ function AdminLoginContent() {
   const searchParams = useSearchParams();
   const redirectParam = searchParams.get("redirect") || "/admin/dashboard";
 
-  const [identifier, setIdentifier] = useState("");
+  const [identifier, setIdentifier] = useState(
+    process.env.NODE_ENV === "development" ? "admin" : ""
+  );
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -131,9 +133,9 @@ function AdminLoginContent() {
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-teal-200 mb-1.5">
+              <label htmlFor="admin-identifier" className="block text-xs font-bold uppercase tracking-wider text-teal-200 mb-1.5">
                 Username or Official Email
               </label>
               <div className="relative">
@@ -141,10 +143,13 @@ function AdminLoginContent() {
                   <User className="w-4 h-4" />
                 </div>
                 <input
+                  id="admin-identifier"
+                  name="username"
                   type="text"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="admin or admin@lakshmeshwar-tmc.gov.in"
+                  autoComplete="username"
                   required
                   autoFocus
                   disabled={loading || success}
@@ -154,7 +159,7 @@ function AdminLoginContent() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-teal-200 mb-1.5">
+              <label htmlFor="admin-password" className="block text-xs font-bold uppercase tracking-wider text-teal-200 mb-1.5">
                 Administrative Password
               </label>
               <div className="relative">
@@ -162,10 +167,13 @@ function AdminLoginContent() {
                   <Lock className="w-4 h-4" />
                 </div>
                 <input
+                  id="admin-password"
+                  name="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
+                  placeholder="Enter administrative password"
+                  autoComplete="current-password"
                   required
                   disabled={loading || success}
                   className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#041211] border border-teal-800 text-white placeholder-teal-600 text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400 transition"
@@ -175,6 +183,7 @@ function AdminLoginContent() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-teal-400 hover:text-teal-200 transition"
                   tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>

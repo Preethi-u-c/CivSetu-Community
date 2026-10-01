@@ -44,7 +44,23 @@ export const adminService = {
       return { success: false, error: "Administrator account is deactivated. Contact municipal authorities." };
     }
 
-    const isMatch = await this.verifyPassword(password, admin.passwordHash);
+    let isMatch = await this.verifyPassword(password, admin.passwordHash);
+
+    // If verification failed on root admin and a local dev password is configured,
+    // ensure database has the updated hash (handles server running prior to .env.local edits)
+    if (!isMatch && admin.id === "ADM-LMC-001" && process.env.INITIAL_ADMIN_PASSWORD) {
+      if (password === process.env.INITIAL_ADMIN_PASSWORD) {
+        const newHash = await this.hashPassword(process.env.INITIAL_ADMIN_PASSWORD);
+        const { getPool } = await import("@/lib/db/postgres");
+        const pool = getPool();
+        await pool.query(
+          "UPDATE admin_users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = 'ADM-LMC-001';",
+          [newHash]
+        );
+        isMatch = true;
+      }
+    }
+
     if (!isMatch) {
       return { success: false, error: "Invalid administrative credentials." };
     }

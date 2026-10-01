@@ -1,5 +1,6 @@
 import { Pool, QueryResultRow } from "pg";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import { wardsData } from "@/data/wards";
 
 // =============================================================================
@@ -1435,19 +1436,32 @@ async function seedDefaultServices(pool: Pool) {
 
 async function seedDefaultAdmins(pool: Pool) {
   try {
-    // Development-only fallback hash (for local environment setup/testing).
-    // Production deployments must supply INITIAL_ADMIN_PASSWORD_HASH via environment variables.
-    const devFallbackHash = "$2b$10$CQ/q4id1DDctw5RttlEAJ.tjetruAk.KRVltwiHnRBo0p0MAUeepi";
-    const adminPasswordHash = process.env.INITIAL_ADMIN_PASSWORD_HASH || devFallbackHash;
+    // 1. Explicit production-ready password hash override
+    // 2. Local development plaintext password (bcrypt-hashed; for LOCAL DEVELOPMENT ONLY)
+    // 3. Fallback hash for initial local development setup
+    let adminPasswordHash = process.env.INITIAL_ADMIN_PASSWORD_HASH;
+
+    if (!adminPasswordHash && process.env.INITIAL_ADMIN_PASSWORD) {
+      adminPasswordHash = await bcrypt.hash(process.env.INITIAL_ADMIN_PASSWORD, 10);
+    }
+
+    if (!adminPasswordHash) {
+      adminPasswordHash = await bcrypt.hash("CivSetuDevAdmin2026!", 10);
+    }
 
     const countRes = await pool.query("SELECT COUNT(*) AS count FROM admin_users;");
     const count = parseInt(countRes.rows[0]?.count || "0", 10);
     if (count > 0) {
-      // If an explicit environment password hash was supplied, ensure default admin record reflects it
+      // If an explicit environment password hash or local development password was supplied, ensure default admin record reflects it
       if (process.env.INITIAL_ADMIN_PASSWORD_HASH) {
         await pool.query(
           "UPDATE admin_users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = 'ADM-LMC-001';",
           [process.env.INITIAL_ADMIN_PASSWORD_HASH]
+        );
+      } else if (process.env.INITIAL_ADMIN_PASSWORD) {
+        await pool.query(
+          "UPDATE admin_users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = 'ADM-LMC-001';",
+          [adminPasswordHash]
         );
       }
       return;
