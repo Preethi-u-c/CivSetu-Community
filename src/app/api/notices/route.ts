@@ -1,56 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db/storage";
+import { isPostgresConfigured } from "@/lib/db/postgres";
+import { noticeDb } from "@/lib/db/notices";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * GET /api/notices
+ * Public API endpoint: Returns active published notices and gazette announcements.
+ * Accessible by citizens and public portals without authentication.
+ */
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const publishedOnly = searchParams.get("all") !== "true";
-
-    const list = db.notices.list(publishedOnly);
-    return NextResponse.json({ success: true, count: list.length, data: list });
-  } catch (error) {
-    console.error("Error retrieving notices:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to retrieve notices." },
-      { status: 500 }
-    );
-  }
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { title, titleKn, category, categoryKn, content, contentKn, fileUrl, isPinned } = body;
-
-    if (!title || !category || !content) {
+    if (!isPostgresConfigured()) {
       return NextResponse.json(
-        { success: false, error: "Title, category, and content are required fields." },
-        { status: 400 }
+        { success: false, error: "Database service is not configured." },
+        { status: 503 }
       );
     }
 
-    const record = await db.notices.create({
-      title,
-      titleKn: titleKn || title,
-      category,
-      categoryKn: categoryKn || category,
-      content,
-      contentKn: contentKn || content,
-      fileUrl,
-      isPinned: !!isPinned,
-    });
+    const { searchParams } = new URL(req.url);
+    const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!, 10) : 20;
+
+    const notices = await noticeDb.listPublic(limit);
 
     return NextResponse.json({
       success: true,
-      message: "Notice published successfully.",
-      data: record,
+      count: notices.length,
+      data: notices,
     });
   } catch (error) {
-    console.error("Error publishing notice:", error);
+    console.error("Error in GET /api/notices:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to publish notice." },
+      { success: false, error: "An unexpected error occurred." },
       { status: 500 }
     );
   }

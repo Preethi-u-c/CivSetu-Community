@@ -54,7 +54,7 @@ export const authService = {
     const expiresAt = new Date(Date.now() + SESSION_DURATION_DAYS * 24 * 60 * 60 * 1000);
     const sessionId = await sessionDb.createSession(citizenId, expiresAt);
 
-    // Set HTTP-Only Cookie
+    // Set HTTP-Only Browser-Session Cookie (no maxAge or expires so cookie terminates on browser close)
     const cookieStore = cookies();
     cookieStore.set({
       name: SESSION_COOKIE_NAME,
@@ -63,7 +63,6 @@ export const authService = {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: SESSION_DURATION_DAYS * 24 * 60 * 60,
     });
 
     return sessionId;

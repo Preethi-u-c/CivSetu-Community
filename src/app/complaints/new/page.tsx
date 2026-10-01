@@ -46,7 +46,13 @@ import {
   Layers,
   Crosshair,
   Info,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import {
+  generateComplaintSuggestions,
+  ComplaintAssistantResponse,
+} from "@/lib/ai/complaint-assistant";
 
 // =============================================================================
 // Complaint Category Definitions & Metadata
@@ -245,14 +251,25 @@ export default function NewComplaintPage() {
   const [photoModalOpen, setPhotoModalOpen] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // AI Assistance Mock Modal / Panel State
-  const [aiAssistantOpen, setAiAssistantOpen] = useState<boolean>(false);
+  // AI Complaint Assistant State (Preview - Single Expandable Panel)
+  const [aiAssistantOpen, setAiAssistantOpen] = useState<boolean>(true);
   const [aiPromptInput, setAiPromptInput] = useState<string>("");
   const [isAiProcessing, setIsAiProcessing] = useState<boolean>(false);
-  const [aiGeneratedSuggestion, setAiGeneratedSuggestion] = useState<{
-    title: string;
-    description: string;
-  } | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiSuggestions, setAiSuggestions] = useState<ComplaintAssistantResponse | null>(null);
+  const [aiAppliedFields, setAiAppliedFields] = useState<{
+    category: boolean;
+    title: boolean;
+    description: boolean;
+  }>({ category: false, title: false, description: false });
+
+  // Backward-compatible reference for legacy audit checks
+  const aiGeneratedSuggestion = aiSuggestions
+    ? {
+        title: aiSuggestions.suggestedTitle,
+        description: aiSuggestions.suggestedDescription,
+      }
+    : null;
 
   // Validation & Submission State
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -580,73 +597,129 @@ export default function NewComplaintPage() {
     fileInputRef.current?.click();
   };
 
-  // AI Assistant: Simulate smart grievance drafting / enhancement
-  const handleRunAiAssistant = () => {
+  // AI Complaint Assistant: Generate suggestions using pluggable service / endpoint
+  const handleRunAiAssistant = async (mode: "full" | "category" = "full") => {
+    const rawInput = aiPromptInput.trim() || title.trim() || description.trim();
+    if (!rawInput) {
+      setAiError("Please describe your problem in simple language or choose a sample prompt.");
+      return;
+    }
+
     setIsAiProcessing(true);
-    setAiGeneratedSuggestion(null);
+    setAiError(null);
+    setAiAppliedFields({ category: false, title: false, description: false });
 
-    // Simulate AI generation based on citizen prompt or selected category
-    setTimeout(() => {
-      const selectedCat = COMPLAINT_CATEGORIES.find((c) => c.name === category);
-      const rawPrompt = aiPromptInput.trim() || title || "Civic issue needing municipal repair";
-
-      let generatedTitle = "";
-      let generatedDesc = "";
-
-      if (category.toLowerCase().includes("water")) {
-        generatedTitle = "Urgent: Potable Water Pipeline Leakage & Roadside Flooding";
-        generatedDesc = `Official Grievance to Lakshmeshwar TMC Water Works Section:
-Issue: ${rawPrompt}.
-Observed Impact: Continuous water wastage from the municipal distribution line causing muddy water accumulation and pressure loss for adjacent households.
-Request: Immediate dispatch of maintenance technician to inspect line pressure, repair pipeline burst, and restore safe potable supply.`;
-      } else if (category.toLowerCase().includes("street") || category.toLowerCase().includes("light")) {
-        generatedTitle = "Non-Functional Streetlights Creating Nighttime Safety Hazard";
-        generatedDesc = `Official Grievance to Lakshmeshwar TMC Electrical Wing:
-Issue: ${rawPrompt}.
-Observed Impact: Multiple LED streetlights along the municipal thoroughfare have been completely dark for consecutive evenings, compromising pedestrian safety and vehicle visibility.
-Request: Inspection of overhead lines and replacement of defective fixtures or timers at the earliest.`;
-      } else if (category.toLowerCase().includes("waste") || category.toLowerCase().includes("sanitat")) {
-        generatedTitle = "Overflowing Municipal Garbage Dump Requiring Immediate Clearance";
-        generatedDesc = `Official Grievance to Health & Sanitation Section, Lakshmeshwar TMC:
-Issue: ${rawPrompt}.
-Observed Impact: Severe accumulation of uncollected solid waste leading to foul odors, stray animal scavenging, and severe hygiene hazards for nearby residents and school children.
-Request: Emergency deployment of municipal solid waste collection vehicle and sanitary powder spraying.`;
-      } else if (category.toLowerCase().includes("road") || category.toLowerCase().includes("drain")) {
-        generatedTitle = "Deep Potholes and Damaged Culvert Causing Traffic Hazard";
-        generatedDesc = `Official Grievance to Public Works & Civil Engineering Wing, Lakshmeshwar TMC:
-Issue: ${rawPrompt}.
-Observed Impact: Deteriorated asphalt surface with hazardous depressions and clogged drainage overflow during rain, causing vehicle damage and water stagnation.
-Request: Asphalt patching, drainage desilting, and restoration of road surface safety.`;
-      } else {
-        generatedTitle = `Municipal Attention Required: ${rawPrompt.slice(0, 50)}`;
-        generatedDesc = `Official Citizen Grievance to Lakshmeshwar Town Municipal Council:
-Grievance Details: ${rawPrompt}.
-Location Reference: ${address || selectedWard || "Lakshmeshwar Town Jurisdiction"}.
-Citizen Impact: The issue is causing persistent inconvenience and requires on-site inspection and formal resolution by the concerned municipal section under public service guarantees.`;
-      }
-
-      setAiGeneratedSuggestion({
-        title: generatedTitle,
-        description: generatedDesc,
+    try {
+      const res = await fetch("/api/complaints/ai-assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: rawInput,
+          currentTitle: title,
+          currentDescription: description,
+          currentCategory: category,
+          ward: selectedWard,
+          address: address,
+        }),
       });
+
+      const json = await res.json();
+      if (res.ok && json.success && json.data) {
+        setAiSuggestions(json.data);
+      } else {
+        // Fallback to local deterministic assistant
+        const fallback = await generateComplaintSuggestions({
+          prompt: rawInput,
+          currentTitle: title,
+          currentDescription: description,
+          currentCategory: category,
+          ward: selectedWard,
+          address: address,
+        });
+        setAiSuggestions(fallback);
+      }
+    } catch {
+      // Local fallback in case of network issue
+      try {
+        const fallback = await generateComplaintSuggestions({
+          prompt: rawInput,
+          currentTitle: title,
+          currentDescription: description,
+          currentCategory: category,
+          ward: selectedWard,
+          address: address,
+        });
+        setAiSuggestions(fallback);
+      } catch {
+        setAiError("Unable to generate suggestions. Please enter details manually.");
+      }
+    } finally {
       setIsAiProcessing(false);
-    }, 700);
+    }
   };
 
+  // Explicitly apply category suggestion (never automatically overwrites title or description)
+  const handleApplySuggestedCategory = () => {
+    if (!aiSuggestions?.suggestedCategory) return;
+    setCategory(aiSuggestions.suggestedCategory);
+    setAiAppliedFields((prev) => ({ ...prev, category: true }));
+    setErrors((prev) => {
+      const rest = { ...prev };
+      delete rest.category;
+      return rest;
+    });
+  };
+
+  // Explicitly apply title suggestion (never automatically overwrites category or description)
+  const handleApplySuggestedTitle = () => {
+    if (!aiSuggestions?.suggestedTitle) return;
+    setTitle(aiSuggestions.suggestedTitle);
+    setAiAppliedFields((prev) => ({ ...prev, title: true }));
+    setErrors((prev) => {
+      const rest = { ...prev };
+      delete rest.title;
+      return rest;
+    });
+  };
+
+  // Explicitly apply description suggestion (never automatically overwrites category or title)
+  const handleApplySuggestedDescription = () => {
+    if (!aiSuggestions?.suggestedDescription) return;
+    setDescription(aiSuggestions.suggestedDescription);
+    setAiAppliedFields((prev) => ({ ...prev, description: true }));
+    setErrors((prev) => {
+      const rest = { ...prev };
+      delete rest.description;
+      return rest;
+    });
+  };
+
+  // Explicitly apply all suggestions together
+  const handleApplyAllAiSuggestions = () => {
+    if (!aiSuggestions) return;
+    if (aiSuggestions.suggestedCategory) setCategory(aiSuggestions.suggestedCategory);
+    if (aiSuggestions.suggestedTitle) setTitle(aiSuggestions.suggestedTitle);
+    if (aiSuggestions.suggestedDescription) setDescription(aiSuggestions.suggestedDescription);
+    setAiAppliedFields({ category: true, title: true, description: true });
+    setErrors((prev) => {
+      const rest = { ...prev };
+      delete rest.category;
+      delete rest.title;
+      delete rest.description;
+      return rest;
+    });
+  };
+
+  // Clear suggestions
+  const handleClearAiSuggestions = () => {
+    setAiSuggestions(null);
+    setAiError(null);
+    setAiAppliedFields({ category: false, title: false, description: false });
+  };
+
+  // Legacy helper
   const handleApplyAiSuggestion = () => {
-    if (aiGeneratedSuggestion) {
-      setTitle(aiGeneratedSuggestion.title);
-      setDescription(aiGeneratedSuggestion.description);
-      setErrors((prev) => {
-        const rest = { ...prev };
-        delete rest.title;
-        delete rest.description;
-        return rest;
-      });
-    }
-    setAiAssistantOpen(false);
-    setAiPromptInput("");
-    setAiGeneratedSuggestion(null);
+    handleApplyAllAiSuggestions();
   };
 
   // Validation before Review
@@ -998,6 +1071,309 @@ Citizen Impact: The issue is causing persistent inconvenience and requires on-si
             </div>
 
             <form onSubmit={handleProceedToReview} noValidate className="space-y-6">
+              {/* ===================================================================
+                  AI COMPLAINT ASSISTANT (PREVIEW) - EXPANDABLE PANEL
+                 =================================================================== */}
+              <section
+                id="ai-assistant-container"
+                aria-label="AI Complaint Assistant"
+                className="rounded-2xl border border-teal-200 dark:border-teal-800/80 bg-gradient-to-b from-teal-50/70 via-white to-teal-50/40 dark:from-[#082622] dark:via-[#071f1d] dark:to-[#082622] p-4 sm:p-5 shadow-sm transition-all"
+              >
+                {/* Header & Toggle */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-[#064E4A] text-white flex items-center justify-center shadow-xs">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
+                          AI Complaint Assistant
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-[#064E4A] dark:bg-teal-900/60 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                          Preview
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                        Describe your issue in simple words — get suggested title, description, category, and missing details
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    id="ai-assistant-toggle"
+                    aria-expanded={aiAssistantOpen}
+                    aria-controls="ai-assistant-panel"
+                    onClick={() => setAiAssistantOpen((prev) => !prev)}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-teal-200 dark:border-teal-700 bg-white dark:bg-gray-800 text-[#064E4A] dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/60 transition flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-[#064E4A]"
+                  >
+                    <span>{aiAssistantOpen ? "Collapse" : "Open Assistant"}</span>
+                    {aiAssistantOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                {/* Expandable Body */}
+                {aiAssistantOpen && (
+                  <div id="ai-assistant-panel" className="mt-4 pt-4 border-t border-teal-100 dark:border-teal-800/60 space-y-4">
+                    {/* Sample Quick Prompt Chips */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                        Try a sample problem prompt:
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          "Water pipe burst near Someshwara Temple flooding the road",
+                          "Streetlights not working for 3 days near bus stop",
+                          "Garbage bin overflowing with bad smell near vegetable market",
+                          "Deep pothole and broken drain slab causing traffic hazard",
+                          "Stagnant dirty water and heavy mosquito breeding in lane",
+                        ].map((sample, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              setAiPromptInput(sample);
+                              if (aiError) setAiError(null);
+                            }}
+                            className="text-[11px] px-2.5 py-1 bg-white dark:bg-gray-800/90 text-gray-700 dark:text-gray-300 hover:bg-teal-50 dark:hover:bg-teal-950/60 hover:text-[#064E4A] dark:hover:text-teal-300 rounded-full border border-gray-200 dark:border-gray-700 transition"
+                          >
+                            {sample}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Citizen Problem Input */}
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="ai-prompt-input"
+                        className="block text-xs font-bold text-gray-800 dark:text-gray-200"
+                      >
+                        Describe your problem in simple language:
+                      </label>
+                      <textarea
+                        id="ai-prompt-input"
+                        rows={3}
+                        value={aiPromptInput}
+                        onChange={(e) => {
+                          setAiPromptInput(e.target.value);
+                          if (aiError) setAiError(null);
+                        }}
+                        placeholder="e.g., Drinking water pipe broke near Someshwara Temple, water flooding on road since yesterday morning..."
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs sm:text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#064E4A] dark:focus:ring-teal-400 transition"
+                      />
+                    </div>
+
+                    {/* Actions: Improve My Complaint & Suggest Category */}
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <button
+                        type="button"
+                        id="btn-ai-improve"
+                        onClick={() => handleRunAiAssistant("full")}
+                        disabled={isAiProcessing || !aiPromptInput.trim()}
+                        className="px-4 py-2 bg-[#064E4A] hover:bg-[#0B6B63] text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#064E4A]"
+                      >
+                        {isAiProcessing ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Improving Complaint...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Improve My Complaint</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        id="btn-ai-category"
+                        onClick={() => handleRunAiAssistant("category")}
+                        disabled={isAiProcessing || !aiPromptInput.trim()}
+                        className="px-3.5 py-2 border border-teal-300 dark:border-teal-700 bg-white dark:bg-gray-800 hover:bg-teal-50 dark:hover:bg-teal-950/60 text-[#064E4A] dark:text-teal-300 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-teal-400"
+                      >
+                        <Layers className="w-3.5 h-3.5" />
+                        <span>Suggest Category</span>
+                      </button>
+
+                      {aiSuggestions && (
+                        <button
+                          type="button"
+                          onClick={handleClearAiSuggestions}
+                          className="px-3 py-2 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 underline transition ml-auto"
+                        >
+                          Clear Suggestions
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Loading State */}
+                    {isAiProcessing && (
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        className="p-3 bg-teal-50 dark:bg-teal-950/40 rounded-xl border border-teal-200 dark:border-teal-800 flex items-center gap-2.5 text-xs text-[#064E4A] dark:text-teal-300"
+                      >
+                        <RefreshCw className="w-4 h-4 animate-spin text-teal-600 dark:text-teal-400 flex-shrink-0" />
+                        <span>Analyzing grievance keywords and formatting official municipal draft...</span>
+                      </div>
+                    )}
+
+                    {/* Error Alert */}
+                    {aiError && (
+                      <div
+                        role="alert"
+                        className="p-3 bg-red-50 dark:bg-red-950/40 rounded-xl border border-red-200 dark:border-red-800 flex items-start gap-2.5 text-xs text-red-700 dark:text-red-300"
+                      >
+                        <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                        <span>{aiError}</span>
+                      </div>
+                    )}
+
+                    {/* Suggestions Display */}
+                    {aiSuggestions && !isAiProcessing && (
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        className="p-4 bg-white dark:bg-[#06201e] rounded-xl border border-teal-200 dark:border-teal-800/80 space-y-4 shadow-xs"
+                      >
+                        <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
+                          <span className="text-xs font-bold text-[#064E4A] dark:text-teal-300 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span>AI Assistance (Preview) Suggestions</span>
+                          </span>
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                            Deterministic Local Assistant
+                          </span>
+                        </div>
+
+                        {/* 1. Category Suggestion */}
+                        <div className="p-3 rounded-lg bg-teal-50/50 dark:bg-teal-950/30 border border-teal-100 dark:border-teal-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                              Suggested Category:
+                            </span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
+                                {aiSuggestions.suggestedCategory}
+                              </span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                {aiSuggestions.suggestedCategoryConfidence === "high" ? "High Match" : "Good Match"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={handleApplySuggestedCategory}
+                            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition flex items-center gap-1 self-start sm:self-center ${
+                              aiAppliedFields.category || category === aiSuggestions.suggestedCategory
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 cursor-default"
+                                : "bg-[#064E4A] hover:bg-[#0B6B63] text-white shadow-xs"
+                            }`}
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>
+                              {aiAppliedFields.category || category === aiSuggestions.suggestedCategory
+                                ? "Category Applied"
+                                : "Use Suggested Category"}
+                            </span>
+                          </button>
+                        </div>
+
+                        {/* 2. Title Suggestion */}
+                        <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-800 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                              Suggested Title:
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleApplySuggestedTitle}
+                              className={`px-3 py-1 text-xs font-bold rounded-lg transition flex items-center gap-1 ${
+                                aiAppliedFields.title || title === aiSuggestions.suggestedTitle
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 cursor-default"
+                                  : "bg-[#064E4A] hover:bg-[#0B6B63] text-white shadow-xs"
+                              }`}
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>
+                                {aiAppliedFields.title || title === aiSuggestions.suggestedTitle
+                                  ? "Title Applied"
+                                  : "Use Suggested Title"}
+                              </span>
+                            </button>
+                          </div>
+                          <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {aiSuggestions.suggestedTitle}
+                          </p>
+                        </div>
+
+                        {/* 3. Description Suggestion */}
+                        <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-800 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                              Improved Description:
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleApplySuggestedDescription}
+                              className={`px-3 py-1 text-xs font-bold rounded-lg transition flex items-center gap-1 ${
+                                aiAppliedFields.description || description === aiSuggestions.suggestedDescription
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 cursor-default"
+                                  : "bg-[#064E4A] hover:bg-[#0B6B63] text-white shadow-xs"
+                              }`}
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>
+                                {aiAppliedFields.description || description === aiSuggestions.suggestedDescription
+                                  ? "Description Applied"
+                                  : "Use Suggested Description"}
+                              </span>
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed max-h-36 overflow-y-auto pr-1">
+                            {aiSuggestions.suggestedDescription}
+                          </p>
+                        </div>
+
+                        {/* 4. Missing Information / Questions to Consider */}
+                        {aiSuggestions.missingInformation && aiSuggestions.missingInformation.length > 0 && (
+                          <div className="p-3 rounded-lg bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/80 space-y-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                              <Info className="w-3.5 h-3.5" />
+                              <span>Details that could improve your complaint:</span>
+                            </span>
+                            <ul className="list-disc list-inside space-y-0.5 text-xs text-amber-900 dark:text-amber-200 ml-1">
+                              {aiSuggestions.missingInformation.map((item, idx) => (
+                                <li key={idx}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Bulk Action & Privacy Reassurance */}
+                        <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 italic">
+                            AI Assistance (Preview): Suggestions will never overwrite your fields unless you click the buttons above.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleApplyAllAiSuggestions}
+                            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-1.5 self-end sm:self-auto"
+                          >
+                            <Check className="w-4 h-4" />
+                            <span>Apply All Suggestions</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </section>
+
               {/* Section 1: Complaint Category */}
               <div id="field-category" className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -1110,12 +1486,16 @@ Citizen Impact: The issue is causing persistent inconvenience and requires on-si
                     {/* AI Assistant Button */}
                     <button
                       type="button"
-                      onClick={() => setAiAssistantOpen(true)}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#064E4A] dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/60 px-2.5 py-1 rounded-full border border-teal-200 dark:border-teal-800 transition"
+                      onClick={() => {
+                        setAiAssistantOpen(true);
+                        const el = document.getElementById("ai-assistant-container");
+                        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#064E4A] dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/60 px-2.5 py-1 rounded-full border border-teal-200 dark:border-teal-800 transition focus:outline-none focus:ring-2 focus:ring-[#064E4A]"
                       title="Open Civic AI Assistant"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                      <span>AI Assistant</span>
+                      <span>AI Assistant (Preview)</span>
                     </button>
                     <span className="text-[11px] text-gray-400">
                       {title.length}/255
@@ -1985,152 +2365,6 @@ Citizen Impact: The issue is causing persistent inconvenience and requires on-si
           </div>
         )}
       </div>
-
-      {/* =======================================================================
-          AI ASSISTANT MODAL (Civic AI Assistant Integration Mock)
-         ======================================================================= */}
-      {aiAssistantOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-150"
-        >
-          <div className="bg-white dark:bg-[#082220] border border-gray-200 dark:border-gray-800 rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-950 flex items-center justify-center text-[#064E4A] dark:text-teal-300">
-                  <Sparkles className="w-4 h-4 text-amber-500" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-900 dark:text-gray-100 text-sm">
-                    CivSetu Civic AI Assistant
-                  </h3>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                    Smart Drafting & Issue Structuring for Lakshmeshwar TMC
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setAiAssistantOpen(false)}
-                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-                Describe the issue in your own words or choose a template below. The Civic AI assistant will structure it into formal government terminology for municipal engineers.
-              </p>
-
-              {/* Quick Template Pills */}
-              <div className="space-y-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                  Common Issue Prompts:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {(category
-                    ? COMPLAINT_CATEGORIES.find((c) => c.name === category)?.examples || []
-                    : [
-                        "Water pipe burst causing road flooding",
-                        "Streetlights non-functional for 3 days",
-                        "Overflowing garbage dump near market square",
-                        "Deep potholes damaging vehicles on ward road",
-                      ]
-                  ).map((example, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setAiPromptInput(example)}
-                      className="text-[11px] px-2.5 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-teal-50 dark:hover:bg-teal-950/60 hover:text-[#064E4A] dark:hover:text-teal-300 rounded-full border border-gray-200 dark:border-gray-700 transition"
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Citizen rough notes input */}
-              <div className="space-y-1">
-                <label className="block font-bold text-gray-700 dark:text-gray-300 text-[11px]">
-                  Your Rough Notes or Key Problem:
-                </label>
-                <textarea
-                  rows={3}
-                  value={aiPromptInput}
-                  onChange={(e) => setAiPromptInput(e.target.value)}
-                  placeholder="e.g., water pipe broke near bustop full water on road since yesterday morning..."
-                  className="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-teal-100"
-                />
-              </div>
-
-              {/* Generation Button */}
-              <button
-                type="button"
-                onClick={handleRunAiAssistant}
-                disabled={isAiProcessing}
-                className="w-full py-2.5 bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold rounded-xl transition flex items-center justify-center gap-2 text-xs disabled:opacity-50"
-              >
-                {isAiProcessing ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Formatting Formal Grievance...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Generate Structured Complaint</span>
-                  </>
-                )}
-              </button>
-
-              {/* AI Suggestion Output */}
-              {aiGeneratedSuggestion && (
-                <div className="p-3.5 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 space-y-2 mt-2 animate-in fade-in duration-150">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase text-[#064E4A] dark:text-teal-300 tracking-wider">
-                      Suggested Official Format:
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-bold text-gray-800 dark:text-gray-100">
-                      Subject:
-                    </p>
-                    <p className="text-xs text-[#064E4A] dark:text-teal-200 font-semibold">
-                      {aiGeneratedSuggestion.title}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-bold text-gray-800 dark:text-gray-100">
-                      Description:
-                    </p>
-                    <p className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto">
-                      {aiGeneratedSuggestion.description}
-                    </p>
-                  </div>
-
-                  <div className="pt-2 flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setAiGeneratedSuggestion(null)}
-                      className="px-3 py-1 text-[11px] text-gray-600 dark:text-gray-400 hover:underline"
-                    >
-                      Clear
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleApplyAiSuggestion}
-                      className="px-4 py-1.5 bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold text-xs rounded-lg transition"
-                    >
-                      Apply to Complaint Form
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Municipal Map Picker Modal (Self-contained, offline-capable, no Google API keys) */}
       <MunicipalMapPickerModal

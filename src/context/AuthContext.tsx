@@ -38,7 +38,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await fetch("/api/auth/me", {
         method: "GET",
-        headers: { "Cache-Control": "no-cache" },
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+        },
         cache: "no-store",
       });
 
@@ -61,16 +64,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     refreshCitizen();
+
+    // Re-verify session when navigating via browser history (back/forward bfcache)
+    const handlePageShow = () => {
+      refreshCitizen();
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+    };
   }, [refreshCitizen]);
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+        },
+      });
     } catch (err) {
       console.error("Logout request error:", err);
     } finally {
       setCitizen(null);
-      window.location.href = "/login";
+      setLoading(false);
+      try {
+        localStorage.removeItem("civsetu_remember_identifier");
+        sessionStorage.clear();
+      } catch {
+        // ignore storage errors
+      }
+      // Replace history location so browser back cannot restore authenticated state
+      window.location.replace("/login");
     }
   }, []);
 

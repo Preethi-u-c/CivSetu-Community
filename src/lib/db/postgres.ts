@@ -36,6 +36,59 @@ export interface SessionRecord {
   createdAt: Date;
 }
 
+export interface AuthorityUserRecord {
+  id: string;
+  fullName: string;
+  designation: string;
+  department: string;
+  authorityLevel: "Local Authority" | "Block level" | "District Panchayat" | "District Administration";
+  email: string;
+  mobileNumber?: string;
+  passwordHash: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuthoritySessionRecord {
+  id: string;
+  authorityId: string;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
+export interface NotificationRecord {
+  id: number;
+  eventType: string;
+  complaintId?: string | null;
+  citizenId?: string | null;
+  authorityId?: string | null;
+  title: string;
+  message: string;
+  channel: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface NoticeRecord {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  targetScope: "Entire Municipality" | "Specific Wards";
+  targetWards?: string | null;
+  priority: "Normal" | "High" | "Urgent";
+  isEmergency: boolean;
+  status: "Draft" | "Published" | "Archived";
+  publishDate: string;
+  expiryDate?: string | null;
+  issuedById?: string | null;
+  issuedByName: string;
+  issuedByDepartment: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // =============================================================================
 // Connection Pool Singleton
 // =============================================================================
@@ -163,10 +216,251 @@ export async function ensurePostgresTables(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_complaint_timeline_complaint_id ON complaint_timeline(complaint_id);
     CREATE INDEX IF NOT EXISTS idx_complaint_timeline_created_at ON complaint_timeline(created_at ASC);
+
+    CREATE TABLE IF NOT EXISTS authority_users (
+        id VARCHAR(64) PRIMARY KEY,
+        full_name VARCHAR(255) NOT NULL,
+        designation VARCHAR(255) NOT NULL,
+        department VARCHAR(255) NOT NULL,
+        authority_level VARCHAR(64) NOT NULL DEFAULT 'Local Authority',
+        email VARCHAR(255) NOT NULL UNIQUE,
+        mobile_number VARCHAR(15),
+        password_hash VARCHAR(255) NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_authority_email ON authority_users(email);
+    CREATE INDEX IF NOT EXISTS idx_authority_level ON authority_users(authority_level);
+
+    CREATE TABLE IF NOT EXISTS authority_sessions (
+        id VARCHAR(64) PRIMARY KEY,
+        authority_id VARCHAR(64) NOT NULL REFERENCES authority_users(id) ON DELETE CASCADE,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_authority_sessions_id ON authority_sessions(authority_id);
+
+    CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        event_type VARCHAR(64) NOT NULL,
+        complaint_id VARCHAR(64) REFERENCES complaints(id) ON DELETE CASCADE,
+        citizen_id VARCHAR(64) REFERENCES citizens(id) ON DELETE CASCADE,
+        authority_id VARCHAR(64) REFERENCES authority_users(id) ON DELETE SET NULL,
+        title VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        channel VARCHAR(32) NOT NULL DEFAULT 'in_app',
+        is_read BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_notifications_complaint_id ON notifications(complaint_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_citizen_id ON notifications(citizen_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+
+    CREATE TABLE IF NOT EXISTS notices (
+        id VARCHAR(64) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT NOT NULL,
+        category VARCHAR(64) NOT NULL DEFAULT 'Public Notice',
+        target_scope VARCHAR(32) NOT NULL DEFAULT 'Entire Municipality',
+        target_wards TEXT,
+        priority VARCHAR(32) NOT NULL DEFAULT 'Normal',
+        is_emergency BOOLEAN NOT NULL DEFAULT FALSE,
+        status VARCHAR(32) NOT NULL DEFAULT 'Published',
+        publish_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        expiry_date TIMESTAMP WITH TIME ZONE,
+        issued_by_id VARCHAR(64) REFERENCES authority_users(id) ON DELETE SET NULL,
+        issued_by_name VARCHAR(255) NOT NULL,
+        issued_by_department VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_notices_status ON notices(status);
+    CREATE INDEX IF NOT EXISTS idx_notices_publish_date ON notices(publish_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_notices_is_emergency ON notices(is_emergency);
+    CREATE INDEX IF NOT EXISTS idx_notices_category ON notices(category);
   `;
 
   await pool.query(ddl);
+  await seedDefaultAuthorities(pool);
+  await seedDefaultNotices(pool);
   tablesInitialized = true;
+}
+
+async function seedDefaultAuthorities(pool: Pool) {
+  try {
+    const countRes = await pool.query("SELECT COUNT(*) AS count FROM authority_users;");
+    const count = parseInt(countRes.rows[0]?.count || "0", 10);
+    if (count > 0) return;
+
+    // Default password hash for 'Authority@Pass2026'
+    const defaultPasswordHash = "$2b$10$r4VYCcVRhAzB2y2q88cGUeLDR.zRiIWdjJEbdLdcEAWiH5KSfr1GC";
+
+    const defaultOfficers = [
+      {
+        id: "OFF-LMC-001",
+        fullName: "Sri. Basavaraj Patil",
+        designation: "Chief Officer / Commissioner",
+        department: "Executive & Municipal Administration",
+        authorityLevel: "Local Authority",
+        email: "commissioner@lakshmeshwar-tmc.gov.in",
+        mobileNumber: "9845012345",
+      },
+      {
+        id: "OFF-LMC-002",
+        fullName: "Smt. Sujata Deshmukh",
+        designation: "Assistant Executive Engineer",
+        department: "Water Supply & Maintenance Wing, Lakshmeshwar TMC",
+        authorityLevel: "Local Authority",
+        email: "aee.water@lakshmeshwar-tmc.gov.in",
+        mobileNumber: "9845023456",
+      },
+      {
+        id: "OFF-LMC-003",
+        fullName: "Sri. Manjunath Gouda",
+        designation: "Senior Health & Sanitation Inspector",
+        department: "Health & Solid Waste Management Section, Lakshmeshwar TMC",
+        authorityLevel: "Local Authority",
+        email: "health.sanitation@lakshmeshwar-tmc.gov.in",
+        mobileNumber: "9845034567",
+      },
+      {
+        id: "OFF-LMC-004",
+        fullName: "Sri. Ramesh Kulkarni",
+        designation: "Junior Engineer (Electrical)",
+        department: "Electrical & Streetlighting Wing, Lakshmeshwar TMC",
+        authorityLevel: "Local Authority",
+        email: "electrical@lakshmeshwar-tmc.gov.in",
+        mobileNumber: "9845045678",
+      },
+      {
+        id: "OFF-TALUK-001",
+        fullName: "Sri. Anand Hiremath",
+        designation: "Taluk Executive Officer (EO)",
+        department: "Lakshmeshwar Taluk Panchayat Executive Office",
+        authorityLevel: "Block level",
+        email: "eo.taluk@lakshmeshwar-tp.gov.in",
+        mobileNumber: "9845056789",
+      },
+      {
+        id: "OFF-DIST-001",
+        fullName: "Dr. Priyadarshini Nayak",
+        designation: "Deputy Commissioner & District Magistrate",
+        department: "Office of the Deputy Commissioner, Gadag District",
+        authorityLevel: "District Administration",
+        email: "dc.gadag@karnataka.gov.in",
+        mobileNumber: "9845067890",
+      },
+    ];
+
+    for (const off of defaultOfficers) {
+      await pool.query(
+        `INSERT INTO authority_users (
+          id, full_name, designation, department, authority_level,
+          email, mobile_number, password_hash, is_active, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT (email) DO NOTHING;`,
+        [
+          off.id,
+          off.fullName,
+          off.designation,
+          off.department,
+          off.authorityLevel,
+          off.email,
+          off.mobileNumber,
+          defaultPasswordHash,
+        ]
+      );
+    }
+  } catch (err) {
+    console.error("Warning: Failed to seed default authorities:", err);
+  }
+}
+
+async function seedDefaultNotices(pool: Pool) {
+  try {
+    const countRes = await pool.query("SELECT COUNT(*) AS count FROM notices;");
+    const count = parseInt(countRes.rows[0]?.count || "0", 10);
+    if (count > 0) return;
+
+    const defaultNotices = [
+      {
+        id: "NOT-LMC-2026-001",
+        title: "Special Monsoon Drainage & Silt Clearance Directive",
+        description: "Mandatory pre-monsoon desilting of primary and secondary storm water drains across all 23 municipal wards. Ward engineers must complete physical inspections and submit clearance certificates within statutory timelines.",
+        category: "Public Works Directive",
+        targetScope: "Entire Municipality",
+        targetWards: "All Wards (01 - 23)",
+        priority: "High",
+        isEmergency: false,
+        status: "Published",
+        issuedById: "OFF-LMC-001",
+        issuedByName: "Sri. Basavaraj Patil",
+        issuedByDepartment: "Executive & Municipal Administration",
+      },
+      {
+        id: "NOT-LMC-2026-002",
+        title: "24-Hour SLA Escalation Protocol for Drinking Water Contamination",
+        description: "Emergency gazette circular: Any drinking water pipeline contamination or chlorination defect grievance filed by citizens shall be escalated automatically within 24 hours to the Taluk Executive Officer if unattended.",
+        category: "Public Health Order",
+        targetScope: "Entire Municipality",
+        targetWards: "All Wards (01 - 23)",
+        priority: "Urgent",
+        isEmergency: true,
+        status: "Published",
+        issuedById: "OFF-LMC-001",
+        issuedByName: "Sri. Basavaraj Patil",
+        issuedByDepartment: "Executive & Municipal Administration",
+      },
+      {
+        id: "NOT-LMC-2026-003",
+        title: "Ward 03 & Ward 04 Water Supply Interconnection Schedule",
+        description: "Scheduled shutdown of main distribution valves from 06:00 AM to 02:00 PM on Friday for pipeline interconnection and digital flow-meter installation. Residents are advised to store adequate drinking water.",
+        category: "Water Supply Advisory",
+        targetScope: "Specific Wards",
+        targetWards: "Ward 03, Ward 04",
+        priority: "Normal",
+        isEmergency: false,
+        status: "Published",
+        issuedById: "OFF-LMC-002",
+        issuedByName: "Smt. Sujata Deshmukh",
+        issuedByDepartment: "Water Supply & Maintenance Wing, Lakshmeshwar TMC",
+      },
+    ];
+
+    for (const n of defaultNotices) {
+      await pool.query(
+        `INSERT INTO notices (
+          id, title, description, category, target_scope, target_wards,
+          priority, is_emergency, status, publish_date,
+          issued_by_id, issued_by_name, issued_by_department,
+          created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10, $11, $12, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT (id) DO NOTHING;`,
+        [
+          n.id,
+          n.title,
+          n.description,
+          n.category,
+          n.targetScope,
+          n.targetWards,
+          n.priority,
+          n.isEmergency,
+          n.status,
+          n.issuedById,
+          n.issuedByName,
+          n.issuedByDepartment,
+        ]
+      );
+    }
+  } catch (err) {
+    console.error("Warning: Failed to seed default notices:", err);
+  }
 }
 
 // Generic query helper

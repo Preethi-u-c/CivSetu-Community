@@ -95,3 +95,76 @@ CREATE TABLE IF NOT EXISTS complaint_timeline (
 
 CREATE INDEX IF NOT EXISTS idx_complaint_timeline_complaint_id ON complaint_timeline(complaint_id);
 CREATE INDEX IF NOT EXISTS idx_complaint_timeline_created_at ON complaint_timeline(created_at ASC);
+
+-- 6. AUTHORITY USERS TABLE
+CREATE TABLE IF NOT EXISTS authority_users (
+    id VARCHAR(64) PRIMARY KEY,
+    full_name VARCHAR(255) NOT NULL,
+    designation VARCHAR(255) NOT NULL,
+    department VARCHAR(255) NOT NULL,
+    authority_level VARCHAR(64) NOT NULL DEFAULT 'Local Authority',
+    email VARCHAR(255) NOT NULL UNIQUE,
+    mobile_number VARCHAR(15),
+    password_hash VARCHAR(255) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_authority_email ON authority_users(email);
+CREATE INDEX IF NOT EXISTS idx_authority_level ON authority_users(authority_level);
+
+-- 7. AUTHORITY SESSIONS TABLE
+CREATE TABLE IF NOT EXISTS authority_sessions (
+    id VARCHAR(64) PRIMARY KEY,
+    authority_id VARCHAR(64) NOT NULL REFERENCES authority_users(id) ON DELETE CASCADE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_authority_sessions_id ON authority_sessions(authority_id);
+
+-- 8. SYSTEM NOTIFICATIONS TABLE
+CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    event_type VARCHAR(64) NOT NULL,
+    complaint_id VARCHAR(64) REFERENCES complaints(id) ON DELETE CASCADE,
+    citizen_id VARCHAR(64) REFERENCES citizens(id) ON DELETE CASCADE,
+    authority_id VARCHAR(64) REFERENCES authority_users(id) ON DELETE SET NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    channel VARCHAR(32) NOT NULL DEFAULT 'in_app',
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_complaint_id ON notifications(complaint_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_citizen_id ON notifications(citizen_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+
+-- 9. GAZETTE & OFFICIAL NOTICES TABLE
+CREATE TABLE IF NOT EXISTS notices (
+    id VARCHAR(64) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    category VARCHAR(64) NOT NULL DEFAULT 'Public Notice',
+    target_scope VARCHAR(32) NOT NULL DEFAULT 'Entire Municipality',
+    target_wards TEXT,
+    priority VARCHAR(32) NOT NULL DEFAULT 'Normal',
+    is_emergency BOOLEAN NOT NULL DEFAULT FALSE,
+    status VARCHAR(32) NOT NULL DEFAULT 'Published',
+    publish_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    expiry_date TIMESTAMP WITH TIME ZONE,
+    issued_by_id VARCHAR(64) REFERENCES authority_users(id) ON DELETE SET NULL,
+    issued_by_name VARCHAR(255) NOT NULL,
+    issued_by_department VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_notices_status ON notices(status);
+CREATE INDEX IF NOT EXISTS idx_notices_publish_date ON notices(publish_date DESC);
+CREATE INDEX IF NOT EXISTS idx_notices_is_emergency ON notices(is_emergency);
+CREATE INDEX IF NOT EXISTS idx_notices_category ON notices(category);
+

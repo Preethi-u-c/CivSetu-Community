@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authService } from "@/lib/services/authService";
 import { isPostgresConfigured } from "@/lib/db/postgres";
 import { complaintDb, ComplaintPriority } from "@/lib/db/complaints";
+import { notificationService } from "@/lib/services/notificationService";
 
 export const dynamic = "force-dynamic";
 
@@ -184,6 +185,14 @@ export async function POST(req: NextRequest) {
       photoUrl: photoUrl && typeof photoUrl === "string" ? photoUrl.trim() : null,
       priority: sanitizedPriority,
     });
+
+    // Notify authority desk of new complaint registration
+    await notificationService.notifyComplaintRegistered(
+      complaint.id,
+      complaint.category,
+      complaint.ward,
+      citizen.id
+    );
 
     return NextResponse.json(
       {

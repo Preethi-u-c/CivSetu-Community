@@ -75,7 +75,7 @@ export const AUTHORITY_WORKFLOW: Record<
 > = {
   "Local Authority": {
     nextLevel: "Block level",
-    defaultAuthority: "Shirahatti Taluk Panchayat Executive Office",
+    defaultAuthority: "Lakshmeshwar Taluk Panchayat Executive Office",
     additionalSlaHours: 48,
   },
   "Block level": {
@@ -593,4 +593,209 @@ export const complaintDb = {
       updatedBy: escalatedBy,
     });
   },
+
+  /**
+   * Lists complaints across the entire municipality for the Authority Dashboard.
+   * Supports comprehensive multi-filtering, search, and pagination.
+   */
+  async listForAuthority(
+    options: {
+      status?: string;
+      category?: string;
+      ward?: string;
+      priority?: string;
+      assignedAuthority?: string;
+      authorityLevel?: string;
+      assignedToMe?: string;
+      search?: string;
+      slaState?: string;
+      nearDeadline?: boolean;
+      overdueOnly?: boolean;
+      escalatedOnly?: boolean;
+      sortOrder?: "asc" | "desc";
+      dateFrom?: string;
+      dateTo?: string;
+      limit?: number;
+      offset?: number;
+    } = {}
+  ): Promise<{ complaints: ComplaintRecord[]; total: number }> {
+    await ensurePostgresTables();
+    const pool = getPool();
+
+    const conditions: string[] = ["1=1"];
+    const params: unknown[] = [];
+    let paramIndex = 1;
+
+    if (options.status && options.status !== "ALL") {
+      conditions.push(`c.status = $${paramIndex++}`);
+      params.push(options.status);
+    }
+
+    if (options.category && options.category !== "ALL") {
+      conditions.push(`c.category = $${paramIndex++}`);
+      params.push(options.category);
+    }
+
+    if (options.ward && options.ward !== "ALL") {
+      conditions.push(`c.ward = $${paramIndex++}`);
+      params.push(options.ward);
+    }
+
+    if (options.priority && options.priority !== "ALL") {
+      conditions.push(`c.priority = $${paramIndex++}`);
+      params.push(options.priority);
+    }
+
+    if (options.assignedAuthority && options.assignedAuthority !== "ALL") {
+      conditions.push(`c.assigned_authority ILIKE $${paramIndex++}`);
+      params.push(`%${options.assignedAuthority}%`);
+    }
+
+    if (options.authorityLevel && options.authorityLevel !== "ALL") {
+      conditions.push(`c.authority_level = $${paramIndex++}`);
+      params.push(options.authorityLevel);
+    }
+
+    if (options.assignedToMe && options.assignedToMe.trim()) {
+      conditions.push(
+        `(c.assigned_authority ILIKE $${paramIndex} OR c.category ILIKE $${paramIndex})`
+      );
+      params.push(`%${options.assignedToMe.trim()}%`);
+      paramIndex++;
+    }
+
+    // SLA State Filtering
+    if (options.slaState === "near_deadline" || options.nearDeadline) {
+      // Near deadline: not resolved/closed, deadline is between NOW() and NOW() + 24 hours
+      conditions.push(
+        `c.status NOT IN ('Resolved', 'Closed') AND c.deadline > CURRENT_TIMESTAMP AND c.deadline <= (CURRENT_TIMESTAMP + INTERVAL '24 hours')`
+      );
+    } else if (options.slaState === "overdue" || options.overdueOnly) {
+      // Overdue: not resolved/closed, deadline has passed
+      conditions.push(
+        `c.status NOT IN ('Resolved', 'Closed') AND c.deadline < CURRENT_TIMESTAMP`
+      );
+    } else if (options.slaState === "on_track") {
+      // On track: not resolved/closed, more than 24 hours remaining
+      conditions.push(
+        `c.status NOT IN ('Resolved', 'Closed') AND c.deadline > (CURRENT_TIMESTAMP + INTERVAL '24 hours')`
+      );
+    }
+
+    if (options.escalatedOnly) {
+      conditions.push(`(c.status = 'Escalated' OR c.authority_level != 'Local Authority' OR c.escalated_at IS NOT NULL)`);
+    }
+
+    if (options.dateFrom) {
+      conditions.push(`c.created_at >= $${paramIndex++}`);
+      params.push(new Date(options.dateFrom));
+    }
+
+    if (options.dateTo) {
+      conditions.push(`c.created_at <= $${paramIndex++}`);
+      params.push(new Date(options.dateTo));
+    }
+
+    if (options.search && options.search.trim()) {
+      conditions.push(
+        `(c.id ILIKE $${paramIndex} OR c.title ILIKE $${paramIndex} OR c.description ILIKE $${paramIndex} OR c.ward ILIKE $${paramIndex} OR c.address ILIKE $${paramIndex} OR cz.full_name ILIKE $${paramIndex} OR cz.mobile_number ILIKE $${paramIndex})`
+      );
+      params.push(`%${options.search.trim()}%`);
+      paramIndex++;
+    }
+
+    const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+    const countSql = `
+      SELECT COUNT(*) AS count
+      FROM complaints c
+      LEFT JOIN citizens cz ON c.citizen_id = cz.id
+      ${whereClause};
+    `;
+    const countRes = await pool.query(countSql, params);
+    const total = parseInt(countRes.rows[0]?.count || "0", 10);
+
+    const limit = Math.min(Math.max(Number(options.limit) || 50, 1), 200);
+    const offset = Math.max(Number(options.offset) || 0, 0);
+
+    let orderClause = `
+      ORDER BY
+        CASE WHEN c.status = 'Escalated' THEN 1
+             WHEN c.deadline < CURRENT_TIMESTAMP AND c.status NOT IN ('Resolved', 'Closed') THEN 2
+             WHEN c.status = 'Submitted' THEN 3
+             WHEN c.status = 'In Progress' THEN 4
+             ELSE 5 END ASC,
+        c.created_at DESC
+    `;
+
+    if (options.sortOrder === "asc") {
+      orderClause = "ORDER BY c.created_at ASC";
+    } else if (options.sortOrder === "desc") {
+      orderClause = "ORDER BY c.created_at DESC";
+    }
+
+    const dataSql = `
+      SELECT c.*, cz.full_name AS citizen_name, cz.mobile_number AS citizen_mobile
+      FROM complaints c
+      LEFT JOIN citizens cz ON c.citizen_id = cz.id
+      ${whereClause}
+      ${orderClause}
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++};
+    `;
+    params.push(limit, offset);
+
+    const dataRes = await pool.query(dataSql, params);
+    return {
+      complaints: dataRes.rows.map(mapComplaintRow),
+      total,
+    };
+  },
+
+  /**
+   * Calculates real-time grievance statistics for the Authority Dashboard summary cards.
+   */
+  async getAuthorityStats(): Promise<{
+    total: number;
+    submitted: number;
+    inProgress: number;
+    nearDeadline: number;
+    escalated: number;
+    resolved: number;
+    overdue: number;
+    assigned: number;
+    underReview: number;
+  }> {
+    await ensurePostgresTables();
+    const pool = getPool();
+
+    const sql = `
+      SELECT
+        COUNT(*) AS total,
+        COUNT(*) FILTER (WHERE status = 'Submitted') AS submitted,
+        COUNT(*) FILTER (WHERE status = 'In Progress') AS in_progress,
+        COUNT(*) FILTER (WHERE status = 'Assigned') AS assigned,
+        COUNT(*) FILTER (WHERE status = 'Under Review') AS under_review,
+        COUNT(*) FILTER (WHERE status = 'Escalated') AS escalated,
+        COUNT(*) FILTER (WHERE status = 'Resolved') AS resolved,
+        COUNT(*) FILTER (WHERE status NOT IN ('Resolved', 'Closed') AND deadline > CURRENT_TIMESTAMP AND deadline <= (CURRENT_TIMESTAMP + INTERVAL '24 hours')) AS near_deadline,
+        COUNT(*) FILTER (WHERE status NOT IN ('Resolved', 'Closed') AND deadline < CURRENT_TIMESTAMP) AS overdue
+      FROM complaints;
+    `;
+
+    const res = await pool.query(sql);
+    const r = res.rows[0];
+
+    return {
+      total: parseInt(r?.total || "0", 10),
+      submitted: parseInt(r?.submitted || "0", 10),
+      inProgress: parseInt(r?.in_progress || "0", 10),
+      nearDeadline: parseInt(r?.near_deadline || "0", 10),
+      escalated: parseInt(r?.escalated || "0", 10),
+      resolved: parseInt(r?.resolved || "0", 10),
+      overdue: parseInt(r?.overdue || "0", 10),
+      assigned: parseInt(r?.assigned || "0", 10),
+      underReview: parseInt(r?.under_review || "0", 10),
+    };
+  },
 };
+

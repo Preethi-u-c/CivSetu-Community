@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { PageContainer } from "@/components/UI/PageContainer";
 import {
@@ -16,10 +16,12 @@ import {
 } from "lucide-react";
 
 export default function LoginPage() {
+  const formRef = useRef<HTMLFormElement>(null);
+  const hasUserTyped = useRef(false);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [redirectPath, setRedirectPath] = useState<string | null>(null);
 
   // Validation & UI State
   const [errors, setErrors] = useState<{ identifier?: string; password?: string }>({});
@@ -27,18 +29,90 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedInfo, setSubmittedInfo] = useState<string | null>(null);
 
-  // Restore remembered identifier on mount
+  // Capture safe internal redirect parameter from query string on mount
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("civsetu_remember_identifier");
-      if (saved) {
-        setIdentifier(saved);
-        setRememberMe(true);
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const redirect = params.get("redirect");
+      if (redirect && redirect.startsWith("/") && !redirect.startsWith("//")) {
+        setRedirectPath(redirect);
       }
-    } catch {
-      // Local storage unavailable
     }
   }, []);
+
+  // Comprehensive form cleanup: resets React state, DOM form elements, and local storage
+  const resetLoginForm = useCallback(() => {
+    hasUserTyped.current = false;
+    setIdentifier("");
+    setPassword("");
+    setErrors({});
+    setFormError(null);
+    setSubmittedInfo(null);
+
+    if (formRef.current) {
+      formRef.current.reset();
+    }
+
+    const idInput = document.getElementById("identifier") as HTMLInputElement | null;
+    if (idInput) {
+      idInput.value = "";
+    }
+    const passInput = document.getElementById("password") as HTMLInputElement | null;
+    if (passInput) {
+      passInput.value = "";
+    }
+
+    try {
+      localStorage.removeItem("civsetu_remember_identifier");
+      sessionStorage.removeItem("civsetu_remember_identifier");
+    } catch {
+      // Storage unavailable
+    }
+  }, []);
+
+  // Ensure clean form state without residual stored credentials on mount, navigation, or visibility
+  useEffect(() => {
+    // 1. Initial reset on mount
+    resetLoginForm();
+
+    // 2. Next-frame reset to override any browser autofill that runs immediately after DOM mount
+    const rafId = requestAnimationFrame(() => {
+      if (!hasUserTyped.current) {
+        resetLoginForm();
+      }
+    });
+
+    // 3. Handle browser back-forward cache (bfcache) restoration
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        resetLoginForm();
+        requestAnimationFrame(resetLoginForm);
+      }
+    };
+
+    // 4. Handle visibility change when tab/window becomes visible again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        const idInput = document.getElementById("identifier") as HTMLInputElement | null;
+        const passInput = document.getElementById("password") as HTMLInputElement | null;
+        if (!hasUserTyped.current && idInput && idInput.value) {
+          idInput.value = "";
+        }
+        if (!hasUserTyped.current && passInput && passInput.value) {
+          passInput.value = "";
+        }
+      }
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener("pageshow", handlePageShow);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [resetLoginForm]);
 
   // Validation helpers
   const isValidMobile = (val: string) => /^[6-9]\d{9}$/.test(val.replace(/\s+/g, ""));
@@ -95,20 +169,11 @@ export default function LoginPage() {
         return;
       }
 
-      // Handle remember me preference
-      try {
-        if (rememberMe) {
-          localStorage.setItem("civsetu_remember_identifier", trimmedIdentifier);
-        } else {
-          localStorage.removeItem("civsetu_remember_identifier");
-        }
-      } catch {
-        // ignore storage errors
-      }
-
       setSubmittedInfo("Authentication successful! Welcome to CivSetu citizen services.");
-      // Navigate to Citizen Portal Dashboard
-      window.location.href = "/dashboard";
+      resetLoginForm();
+      // Navigate to intended redirect destination or Citizen Portal Dashboard
+      const destination = redirectPath || "/dashboard";
+      window.location.href = destination;
     } catch {
       setFormError("Network error communicating with authentication server. Please try again.");
     } finally {
@@ -165,7 +230,13 @@ export default function LoginPage() {
         )}
 
         {/* Citizen Login Form */}
-        <form onSubmit={handleLoginSubmit} noValidate className="space-y-4">
+        <form
+          ref={formRef}
+          onSubmit={handleLoginSubmit}
+          noValidate
+          autoComplete="off"
+          className="space-y-4"
+        >
           {/* 1. Mobile Number or Email */}
           <div>
             <label
@@ -178,9 +249,12 @@ export default function LoginPage() {
               <User className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
               <input
                 id="identifier"
+                name="username"
                 type="text"
+                autoComplete="username"
                 value={identifier}
                 onChange={(e) => {
+                  hasUserTyped.current = true;
                   setIdentifier(e.target.value);
                   if (errors.identifier) {
                     setErrors((prev) => ({ ...prev, identifier: undefined }));
@@ -217,9 +291,12 @@ export default function LoginPage() {
               <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
               <input
                 id="password"
+                name="password"
                 type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => {
+                  hasUserTyped.current = true;
                   setPassword(e.target.value);
                   if (errors.password) {
                     setErrors((prev) => ({ ...prev, password: undefined }));
@@ -262,19 +339,6 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Optional Remember Me */}
-          <div className="flex items-center text-xs text-gray-600 dark:text-gray-400">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="rounded border-gray-300 dark:border-gray-700 text-[#064E4A] focus:ring-[#064E4A]"
-              />
-              <span>Remember this device</span>
-            </label>
-          </div>
-
           {/* 4. Login Button */}
           <div className="pt-2">
             <button
@@ -301,7 +365,7 @@ export default function LoginPage() {
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Don&apos;t have an account?{" "}
               <Link
-                href="/register"
+                href={redirectPath ? `/register?redirect=${encodeURIComponent(redirectPath)}` : "/register"}
                 className="font-bold text-[#064E4A] dark:text-teal-400 hover:underline"
               >
                 Register
