@@ -3,6 +3,9 @@ import { authorityService } from "@/lib/services/authorityService";
 import { isPostgresConfigured } from "@/lib/db/postgres";
 import { complaintDb, ComplaintStatus, AuthorityLevel } from "@/lib/db/complaints";
 import { notificationService } from "@/lib/services/notificationService";
+import { auditService } from "@/lib/services/auditService";
+import { enforceRateLimit, getClientIp } from "@/lib/security/rateLimiter";
+import { isValidComplaintId, sanitizeString } from "@/lib/security/validator";
 
 export const dynamic = "force-dynamic";
 
@@ -35,9 +38,9 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     }
 
     const complaintId = params.id;
-    if (!complaintId) {
+    if (!isValidComplaintId(complaintId)) {
       return NextResponse.json(
-        { success: false, error: "Complaint ID parameter is required." },
+        { success: false, error: "A valid complaint ID is required." },
         { status: 400 }
       );
     }
@@ -47,6 +50,13 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json(
         { success: false, error: "Complaint not found." },
         { status: 404 }
+      );
+    }
+
+    if (authority.authorityLevel !== complaint.authorityLevel) {
+      return NextResponse.json(
+        { success: false, error: "You are not authorized to access this complaint." },
+        { status: 403 }
       );
     }
 
@@ -96,7 +106,25 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       );
     }
 
+    const rateLimit = enforceRateLimit(req, "complaints", {
+      identifier: `authority:${authority.id}:${getClientIp(req)}`,
+      limit: 30,
+      windowMs: 60_000,
+    });
+    if (!rateLimit.isAllowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many requests. Please try again shortly." },
+        { status: 429, headers: { "Retry-After": String(rateLimit.resetSeconds) } }
+      );
+    }
+
     const complaintId = params.id;
+    if (!isValidComplaintId(complaintId)) {
+      return NextResponse.json(
+        { success: false, error: "A valid complaint ID is required." },
+        { status: 400 }
+      );
+    }
     const complaint = await complaintDb.getById(complaintId);
     if (!complaint) {
       return NextResponse.json(
@@ -105,13 +133,53 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       );
     }
 
+    if (authority.authorityLevel !== complaint.authorityLevel) {
+      return NextResponse.json(
+        { success: false, error: "You are not authorized to modify this complaint." },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const { action, status, assignedAuthority, authorityLevel } = body;
-    const note = (body.note || body.notes || "").trim();
-    const reason = (body.reason || body.note || body.notes || "").trim();
-    const resolutionNotes = (body.resolutionNotes || body.note || body.notes || "").trim();
+    const cleanText = (value: unknown, maxLength = 2_000) => {
+      const text = sanitizeString(value);
+      return text.length <= maxLength ? text : null;
+    };
+    const note = cleanText(body.note || body.notes);
+    const reason = cleanText(body.reason || body.note || body.notes);
+    const resolutionNotes = cleanText(body.resolutionNotes || body.note || body.notes, 4_000);
+    if (note === null || reason === null || resolutionNotes === null) {
+      return NextResponse.json(
+        { success: false, error: "Text fields exceed the maximum allowed length." },
+        { status: 400 }
+      );
+    }
 
     const officerSignature = `${authority.fullName} (${authority.designation})`;
+    const oldState = {
+      status: complaint.status,
+      assignedAuthority: complaint.assignedAuthority,
+      authorityLevel: complaint.authorityLevel,
+    };
+    const logAction = async (actionName: string, updated: typeof complaint, details?: string) => {
+      await auditService.logComplaintAction({
+        actorId: authority.id,
+        actorName: authority.fullName,
+        actorRole: authority.designation,
+        action: actionName,
+        complaintId,
+        oldState,
+        newState: {
+          status: updated.status,
+          assignedAuthority: updated.assignedAuthority,
+          authorityLevel: updated.authorityLevel,
+          resolutionNotes: updated.resolutionNotes || undefined,
+        },
+        details,
+        ipAddress: getClientIp(req),
+      });
+    };
 
     // Safety & Lifecycle: Prevent invalid workflow transitions on resolved/closed complaints
     if ((complaint.status === "Resolved" || complaint.status === "Closed") && action !== "remark") {
@@ -132,7 +200,13 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         updatedBy: officerSignature,
       });
 
-      await notificationService.notifyComplaintAccepted(complaintId, complaint.citizenId, officerSignature);
+      await notificationService.notifyComplaintAccepted(
+        complaintId,
+        complaint.citizenId,
+        officerSignature,
+        note || "Grievance accepted for formal verification and field assessment by Lakshmeshwar TMC."
+      );
+      await logAction("ACCEPT_COMPLAINT", updated, note || undefined);
 
       return NextResponse.json({
         success: true,
@@ -161,7 +235,14 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         updatedBy: officerSignature,
       });
 
-      await notificationService.notifyComplaintAssigned(complaintId, assignedAuthority.trim(), complaint.citizenId);
+      await notificationService.notifyComplaintAssigned(
+        complaintId,
+        assignedAuthority.trim(),
+        complaint.citizenId,
+        targetLevel,
+        note || `Assigned to ${assignedAuthority.trim()} by ${officerSignature}.`
+      );
+      await logAction("ASSIGN_COMPLAINT", updated, note || `Assigned to ${assignedAuthority.trim()}.`);
 
       return NextResponse.json({
         success: true,
@@ -197,7 +278,18 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         updatedBy: officerSignature,
       });
 
-      await notificationService.notifyStatusUpdated(complaintId, status, note, complaint.citizenId);
+      if (status === "Resolved") {
+        await notificationService.notifyComplaintResolved(complaintId, note || "Grievance marked as Resolved", complaint.citizenId);
+      } else {
+        await notificationService.notifyStatusUpdated(
+          complaintId,
+          status,
+          note,
+          complaint.citizenId,
+          complaint.assignedAuthority
+        );
+      }
+      await logAction("UPDATE_COMPLAINT_STATUS", updated, note || `Status changed to ${status}.`);
 
       return NextResponse.json({
         success: true,
@@ -226,6 +318,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       });
 
       await notificationService.notifyRemarkAdded(complaintId, note.trim(), officerSignature, complaint.citizenId);
+      await logAction("ADD_COMPLAINT_REMARK", complaint, note.trim());
 
       const refreshed = await complaintDb.getById(complaintId);
       const timeline = await complaintDb.getTimeline(complaintId);
@@ -259,6 +352,16 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         assignedTo: complaint.assignedAuthority,
       });
 
+      await notificationService.notifyInformationRequested(
+        complaintId,
+        note.trim(),
+        officerSignature,
+        complaint.citizenId,
+        complaint.assignedAuthority,
+        complaint.authorityLevel
+      );
+      await logAction("REQUEST_COMPLAINT_INFORMATION", complaint, note.trim());
+
       return NextResponse.json({
         success: true,
         message: "Clarification request logged in grievance history.",
@@ -283,6 +386,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         reason.trim(),
         complaint.citizenId
       );
+      await logAction("ESCALATE_COMPLAINT", updated, reason.trim());
 
       return NextResponse.json({
         success: true,
@@ -309,6 +413,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       });
 
       await notificationService.notifyComplaintResolved(complaintId, cleanNotes, complaint.citizenId);
+      await logAction("RESOLVE_COMPLAINT", updated, cleanNotes);
 
       return NextResponse.json({
         success: true,
@@ -324,7 +429,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   } catch (error) {
     console.error(`Error in PATCH /api/authority/complaints/${params.id}:`, error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "An unexpected error occurred." },
+      { success: false, error: "Something went wrong. Please try again." },
       { status: 500 }
     );
   }

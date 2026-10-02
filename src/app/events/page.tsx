@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
@@ -38,7 +38,7 @@ function EventsContent() {
   const urlCategory = searchParams?.get("category") || "ALL";
   const urlTime = (searchParams?.get("time") as "upcoming" | "past" | "all") || "upcoming";
 
-  const [events, setEvents] = useState<MunicipalEvent[]>([]);
+  const [allEvents, setAllEvents] = useState<MunicipalEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -57,28 +57,51 @@ function EventsContent() {
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.set("timeFilter", timeFilter);
-      if (activeCategory !== "ALL") params.set("category", activeCategory);
-      if (selectedWard !== "ALL") params.set("ward", selectedWard);
-      if (search.trim()) params.set("search", search.trim());
-      params.set("limit", "50");
-
-      const res = await fetch(`/api/events?${params.toString()}`);
+      const res = await fetch("/api/events?limit=100");
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
-        setEvents(json.data);
+        setAllEvents(json.data);
       }
     } catch (err) {
       console.error("Failed to load events:", err);
     } finally {
       setLoading(false);
     }
-  }, [timeFilter, activeCategory, selectedWard, search]);
+  }, []);
 
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
+
+  // Instant zero-latency filter on tab or category click
+  const filteredEvents = useMemo(() => {
+    const today = new Date().toISOString().split("T")[0];
+    return allEvents.filter((ev) => {
+      // Time filter
+      if (timeFilter === "upcoming" && ev.eventDate < today) return false;
+      if (timeFilter === "past" && ev.eventDate >= today) return false;
+      // Category filter
+      if (activeCategory !== "ALL" && ev.category !== activeCategory) return false;
+      // Ward filter
+      if (selectedWard !== "ALL") {
+        const wStr = selectedWard.toLowerCase();
+        const tWard = (ev.wardRelevance || "").toLowerCase();
+        const match = tWard.includes(wStr) || tWard.includes("all wards");
+        if (!match) return false;
+      }
+      // Search
+      if (search.trim()) {
+        const q = search.trim().toLowerCase();
+        const inTitle = ev.title.toLowerCase().includes(q);
+        const inDesc = ev.description.toLowerCase().includes(q);
+        const inLoc = ev.location.toLowerCase().includes(q);
+        const inOrg = ev.organizer.toLowerCase().includes(q);
+        const inWard = (ev.wardRelevance || "").toLowerCase().includes(q);
+        return inTitle || inDesc || inLoc || inOrg || inWard;
+      }
+      return true;
+    });
+  }, [allEvents, timeFilter, activeCategory, selectedWard, search]);
 
   const isCitizenWardMatch = (wardRelevance: string): boolean => {
     if (!isAuthenticated || !citizen?.wardNumber) return false;
@@ -207,7 +230,7 @@ function EventsContent() {
           </div>
 
           <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-            Showing <strong className="text-gray-900 dark:text-gray-100">{events.length}</strong> {timeFilter === "upcoming" ? "upcoming" : timeFilter === "past" ? "past" : ""} event{events.length === 1 ? "" : "s"}
+            Showing <strong className="text-gray-900 dark:text-gray-100">{filteredEvents.length}</strong> {timeFilter === "upcoming" ? "upcoming" : timeFilter === "past" ? "past" : ""} event{filteredEvents.length === 1 ? "" : "s"}
           </div>
         </div>
 
@@ -295,7 +318,7 @@ function EventsContent() {
           <RefreshCw className="w-8 h-8 text-[#064E4A] dark:text-teal-400 animate-spin mx-auto" />
           <p className="text-sm text-gray-500 dark:text-gray-400">Loading Lakshmeshwar community events...</p>
         </div>
-      ) : events.length === 0 ? (
+      ) : filteredEvents.length === 0 ? (
         <div className="bg-white dark:bg-[#071d1b] border border-gray-200 dark:border-gray-800 rounded-2xl p-10 text-center space-y-4">
           <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 flex items-center justify-center mx-auto">
             <CalendarDays className="w-6 h-6" />
@@ -333,7 +356,7 @@ function EventsContent() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {events.map((event) => {
+          {filteredEvents.map((event) => {
             const dateObj = formatEventDate(event.eventDate);
             const isMatch = isCitizenWardMatch(event.wardRelevance);
             const isPast = new Date(event.eventDate) < new Date(new Date().toDateString());

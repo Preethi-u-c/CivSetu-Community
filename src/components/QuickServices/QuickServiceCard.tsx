@@ -47,6 +47,7 @@ export const QuickServiceCard: React.FC<QuickServiceCardProps> = ({ service }) =
   return (
     <Link
       href={service.href}
+      prefetch={true}
       className="group block bg-white dark:bg-[#071f1d] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-[#064E4A]/40 transition-all"
     >
       <div className="flex items-center gap-4">

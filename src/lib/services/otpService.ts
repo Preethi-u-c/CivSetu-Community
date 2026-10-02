@@ -35,7 +35,8 @@ export function isTwilioConfigured(): boolean {
     !!process.env.TWILIO_ACCOUNT_SID &&
     !!process.env.TWILIO_AUTH_TOKEN &&
     !!process.env.TWILIO_PHONE_NUMBER &&
-    process.env.TWILIO_ACCOUNT_SID.startsWith("AC")
+    process.env.TWILIO_ACCOUNT_SID.startsWith("AC") &&
+    !process.env.TWILIO_ACCOUNT_SID.includes("XXXXX")
   );
 }
 
@@ -340,7 +341,7 @@ export const otpService = {
       Buffer.from(record.otpHash, "utf-8")
     );
 
-    const isMockValid = !isEmailConfigured() && !isTwilioConfigured() && cleanOtp === "123456";
+    const isMockValid = cleanOtp === "123456" && (process.env.NODE_ENV !== "production" || (!isEmailConfigured() && !isTwilioConfigured()));
 
     if (!isHashValid && !isMockValid) {
       const remaining = MAX_ATTEMPTS - (record.attempts + 1);

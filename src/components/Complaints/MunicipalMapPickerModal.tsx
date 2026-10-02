@@ -125,6 +125,78 @@ export const LAKSHMESHWAR_LANDMARKS: LandmarkPreset[] = [
     pinX: 430,
     pinY: 320,
   },
+  {
+    id: "police_station",
+    name: "Lakshmeshwar Police Station",
+    kannadaName: "ಪೊಲೀಸ್ ಠಾಣೆ ವೃತ್ತ",
+    wardNumber: 10,
+    wardName: "Lakshmeshwar Ward No. 10",
+    lat: 15.1175,
+    lng: 75.473,
+    description: "Town law enforcement precinct & emergency civic outpost",
+    pinX: 280,
+    pinY: 360,
+  },
+  {
+    id: "taluk_panchayat",
+    name: "Lakshmeshwar Taluk Panchayat Office",
+    kannadaName: "ತಾಲೂಕು ಪಂಚಾಯತ್ ಕಾರ್ಯಾಲಯ",
+    wardNumber: 11,
+    wardName: "Lakshmeshwar Ward No. 11",
+    lat: 15.119,
+    lng: 75.469,
+    description: "Rural and taluk development administrative headquarters",
+    pinX: 200,
+    pinY: 350,
+  },
+  {
+    id: "sub_registrar",
+    name: "Sub-Registrar & Revenue Office",
+    kannadaName: "ಉಪನೋಂದಣಾಧಿಕಾರಿ ಹಾಗೂ ಕಂದಾಯ ಕಚೇರಿ",
+    wardNumber: 14,
+    wardName: "Lakshmeshwar Ward No. 14",
+    lat: 15.126,
+    lng: 75.465,
+    description: "Property registration, land records & municipal revenue zone",
+    pinX: 90,
+    pinY: 190,
+  },
+  {
+    id: "library",
+    name: "City Central Library & Reading Room",
+    kannadaName: "ನಗರ ಕೇಂದ್ರ ಗ್ರಂಥಾಲಯ",
+    wardNumber: 16,
+    wardName: "Lakshmeshwar Ward No. 16",
+    lat: 15.132,
+    lng: 75.468,
+    description: "Public municipal library and cultural knowledge repository",
+    pinX: 150,
+    pinY: 50,
+  },
+  {
+    id: "fire_station",
+    name: "Fire & Emergency Services Station",
+    kannadaName: "ಅಗ್ನಿಶಾಮಕ ಹಾಗೂ ತುರ್ತು ಸೇವೆಗಳ ಠಾಣೆ",
+    wardNumber: 19,
+    wardName: "Lakshmeshwar Ward No. 19",
+    lat: 15.131,
+    lng: 75.4795,
+    description: "Emergency fire response and disaster rescue base",
+    pinX: 400,
+    pinY: 70,
+  },
+  {
+    id: "hescom_station",
+    name: "HESCOM 110kV Electrical Substation",
+    kannadaName: "ಹೆಸ್ಕಾಂ ೧೧೦ಕೆವಿ ವಿದ್ಯುತ್ ಉಪಕೇಂದ್ರ",
+    wardNumber: 21,
+    wardName: "Lakshmeshwar Ward No. 21",
+    lat: 15.1245,
+    lng: 75.483,
+    description: "Regional power grid distribution & municipal electricity maintenance",
+    pinX: 470,
+    pinY: 210,
+  },
 ];
 
 export interface MunicipalLocationSelectedData {
@@ -135,6 +207,8 @@ export interface MunicipalLocationSelectedData {
   wardCode: string;
   wardName: string;
   isSpecificLandmark: boolean;
+  privacyMode?: "fuzzed" | "precise";
+  isPrivacyFuzzed?: boolean;
 }
 
 /**
@@ -216,6 +290,8 @@ export const MunicipalMapPickerModal: React.FC<MunicipalMapPickerModalProps> = (
   );
   const [selectedWardNumber, setSelectedWardNumber] = useState<number>(3);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [privacyMode, setPrivacyMode] = useState<"fuzzed" | "precise">("fuzzed");
+  const [mapView, setMapView] = useState<"gis" | "osm">("gis");
   const svgRef = useRef<SVGSVGElement>(null);
 
   // Sync initial coordinates on opening
@@ -355,14 +431,20 @@ export const MunicipalMapPickerModal: React.FC<MunicipalMapPickerModalProps> = (
       ? selectedLandmark.name
       : `Pin Location near Ward ${selectedWardNumber}, Lakshmeshwar`;
 
+    // Apply privacy preservation if enabled: round to 3 decimal places (~100m) to avoid storing private home coordinates
+    const finalLat = privacyMode === "fuzzed" ? parseFloat(currentLat.toFixed(3)) : currentLat;
+    const finalLng = privacyMode === "fuzzed" ? parseFloat(currentLng.toFixed(3)) : currentLng;
+
     onSelectLocation({
-      latitude: currentLat,
-      longitude: currentLng,
+      latitude: finalLat,
+      longitude: finalLng,
       landmarkName: landmarkLabel,
       wardNumber: selectedWardNumber,
       wardCode: wardCode,
       wardName: matchedWard ? matchedWard.name : `Lakshmeshwar Ward No. ${selectedWardNumber}`,
       isSpecificLandmark: selectedLandmark !== null,
+      privacyMode: privacyMode,
+      isPrivacyFuzzed: privacyMode === "fuzzed",
     });
     onClose();
   };
@@ -410,19 +492,47 @@ export const MunicipalMapPickerModal: React.FC<MunicipalMapPickerModalProps> = (
               <p className="text-xs text-teal-100 flex items-center gap-1.5 mt-0.5">
                 <span>Self-Contained Municipal Map</span>
                 <span>•</span>
-                <span>No External API Keys Required</span>
+                <span>Privacy-Preserving Geocoding</span>
               </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close municipal map picker"
-            className="p-2 rounded-xl text-teal-100 hover:text-white hover:bg-white/10 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Map Provider Switcher */}
+            <div className="flex items-center gap-1 bg-white/15 p-0.5 rounded-lg text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setMapView("gis")}
+                className={`px-2.5 py-1 rounded-md transition ${
+                  mapView === "gis"
+                    ? "bg-white text-[#064E4A] font-bold shadow-xs"
+                    : "text-teal-100 hover:text-white"
+                }`}
+              >
+                GIS Vector
+              </button>
+              <button
+                type="button"
+                onClick={() => setMapView("osm")}
+                className={`px-2.5 py-1 rounded-md transition ${
+                  mapView === "osm"
+                    ? "bg-white text-[#064E4A] font-bold shadow-xs"
+                    : "text-teal-100 hover:text-white"
+                }`}
+              >
+                OpenStreetMap
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close municipal map picker"
+              className="p-2 rounded-xl text-teal-100 hover:text-white hover:bg-white/10 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -450,22 +560,36 @@ export const MunicipalMapPickerModal: React.FC<MunicipalMapPickerModalProps> = (
             </div>
           </div>
 
-          {/* Interactive Lakshmeshwar TMC SVG Map Canvas */}
+          {/* Interactive Lakshmeshwar TMC Map Canvas (GIS Vector or OpenStreetMap) */}
           <div className="relative bg-[#F5F2EC] dark:bg-[#132220] border-2 border-dashed border-teal-200 dark:border-teal-900 rounded-xl overflow-hidden select-none">
-            <svg
-              ref={svgRef}
-              viewBox="0 0 540 400"
-              onClick={handleSvgClick}
-              className="w-full h-64 sm:h-80 cursor-crosshair"
-              aria-label="Lakshmeshwar TMC Municipal GIS Grid. Click to place pin."
-            >
-              {/* Background Municipal Grid */}
-              <defs>
-                <pattern id="civic-grid" width="30" height="30" patternUnits="userSpaceOnUse">
-                  <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#E6E0D4" strokeWidth="0.8" />
-                </pattern>
-              </defs>
-              <rect width="540" height="400" fill="url(#civic-grid)" />
+            {mapView === "osm" ? (
+              <div className="w-full h-64 sm:h-80 relative">
+                <iframe
+                  title="Lakshmeshwar OpenStreetMap"
+                  src={`https://www.openstreetmap.org/export/embed.html?bbox=75.4500%2C15.1050%2C75.4950%2C15.1450&amp;layer=mapnik&amp;marker=${currentLat}%2C${currentLng}`}
+                  className="w-full h-full border-0 select-none"
+                  loading="lazy"
+                />
+                <div className="absolute top-2 left-2 bg-white/90 dark:bg-gray-900/90 text-[10px] px-2 py-1 rounded shadow text-gray-700 dark:text-gray-300 font-bold backdrop-blur-xs flex items-center gap-1">
+                  <MapPin className="w-3 h-3 text-[#064E4A] dark:text-teal-400" />
+                  <span>OpenStreetMap Live: {currentLat.toFixed(4)}°N, {currentLng.toFixed(4)}°E</span>
+                </div>
+              </div>
+            ) : (
+              <svg
+                ref={svgRef}
+                viewBox="0 0 540 400"
+                onClick={handleSvgClick}
+                className="w-full h-64 sm:h-80 cursor-crosshair"
+                aria-label="Lakshmeshwar TMC Municipal GIS Grid. Click to place pin."
+              >
+                {/* Background Municipal Grid */}
+                <defs>
+                  <pattern id="civic-grid" width="30" height="30" patternUnits="userSpaceOnUse">
+                    <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#E6E0D4" strokeWidth="0.8" />
+                  </pattern>
+                </defs>
+                <rect width="540" height="400" fill="url(#civic-grid)" />
 
               {/* Major Roads / Arterial Networks */}
               <path d="M30 90 Q 270 200 510 320" stroke="#DDD4C4" strokeWidth="8" fill="none" />
@@ -640,6 +764,7 @@ export const MunicipalMapPickerModal: React.FC<MunicipalMapPickerModalProps> = (
                 <circle cx="0" cy="-13" r="3.5" fill="#FFFFFF" />
               </g>
             </svg>
+            )}
 
             {/* Map Canvas Overlay Badge */}
             <div className="absolute top-2 left-2 bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-700 text-[11px] font-semibold text-gray-700 dark:text-gray-300 shadow-sm flex items-center gap-1.5">
@@ -715,6 +840,35 @@ export const MunicipalMapPickerModal: React.FC<MunicipalMapPickerModalProps> = (
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Privacy Preservation Mode Option */}
+          <div className="p-3 bg-teal-50/80 dark:bg-teal-950/40 rounded-xl border border-teal-200 dark:border-teal-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <label className="flex items-start sm:items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={privacyMode === "fuzzed"}
+                onChange={(e) => setPrivacyMode(e.target.checked ? "fuzzed" : "precise")}
+                className="mt-0.5 sm:mt-0 w-4 h-4 rounded text-[#064E4A] focus:ring-[#064E4A]"
+              />
+              <div>
+                <span className="font-bold text-gray-900 dark:text-teal-200">
+                  Protect Residential Privacy (Neighborhood Fuzzing ~100m)
+                </span>
+                <p className="text-[11px] text-gray-600 dark:text-gray-400">
+                  Fuzzes coordinates to neighborhood-level to prevent storing exact domestic home GPS in public records.
+                </p>
+              </div>
+            </label>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold self-start sm:self-auto shrink-0 ${
+                privacyMode === "fuzzed"
+                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                  : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+              }`}
+            >
+              {privacyMode === "fuzzed" ? "Privacy Protected" : "Precise Pinpoint"}
+            </span>
           </div>
 
           {/* Selected Location Summary Box */}

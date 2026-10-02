@@ -37,6 +37,8 @@ import {
   HelpCircle,
   Clock,
   Check,
+  CheckCheck,
+  UserCheck,
   X,
   ExternalLink,
   Sparkles,
@@ -46,191 +48,20 @@ import { NoticeRecord } from "@/lib/db/notices";
 import { ComplaintRecord } from "@/lib/db/complaints";
 import { ServiceApplicationRecord } from "@/lib/db/types";
 
-// =============================================================================
-// Ask CivSetu Assistant Modal
-// =============================================================================
-
-function AskCivSetuModal({
-  isOpen,
-  onClose,
-  citizenWard,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  citizenWard: string;
-}) {
-  const [query, setQuery] = useState("");
-  const [messages, setMessages] = useState<
-    { sender: "user" | "bot"; text: string; link?: string; linkText?: string }[]
-  >([
-    {
-      sender: "bot",
-      text: `Namaskara! I am CivSetu, your automated Lakshmeshwar TMC civic assistant. How can I help you today? You can ask about drinking water timings, garbage collection schedules, property tax (Form-3), lodging grievances, or municipal welfare schemes.`,
-    },
-  ]);
-  const [thinking, setThinking] = useState(false);
-  const chatBottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, thinking]);
-
-  if (!isOpen) return null;
-
-  const handleAsk = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
-
-    const userText = query.trim();
-    setMessages((prev) => [...prev, { sender: "user", text: userText }]);
-    setQuery("");
-    setThinking(true);
-
-    setTimeout(() => {
-      const q = userText.toLowerCase();
-      let answer = "";
-      let link: string | undefined;
-      let linkText: string | undefined;
-
-      if (q.includes("water") || q.includes("tap") || q.includes("leak")) {
-        answer = `Drinking water in ${citizenWard} is supplied on an alternate-day schedule by Lakshmeshwar TMC Engineering Wing. For new connections, apply via Form TMC-W1. If you are experiencing a pipeline leak or low pressure, you can lodge an official grievance.`;
-        link = "/complaints/new?category=water";
-        linkText = "Report Water Supply Issue";
-      } else if (q.includes("garbage") || q.includes("waste") || q.includes("dump") || q.includes("clean")) {
-        answer = `Door-to-door municipal solid waste collection operates daily between 6:30 AM and 10:30 AM across all 23 wards. Please segregate wet and dry waste into separate bins.`;
-        link = "/complaints/new?category=waste";
-        linkText = "Report Sanitation Issue";
-      } else if (q.includes("tax") || q.includes("khata") || q.includes("property") || q.includes("form 3")) {
-        answer = `Property tax can be assessed and paid at TMC Revenue Room No. 2 or online via E-Swathu. To request an E-Swathu Form-3 extract or ownership mutation, submit Form TMC-KT3 online.`;
-        link = "/applications?service=khata";
-        linkText = "Apply for Khata Extract";
-      } else if (q.includes("streetlight") || q.includes("dark") || q.includes("light") || q.includes("bulb")) {
-        answer = `Non-functional streetlights in Lakshmeshwar are managed by the Electrical & Streetlighting Wing with a statutory SLA of 24 to 48 hours.`;
-        link = "/complaints/new?category=streetlights";
-        linkText = "Report Defective Streetlight";
-      } else if (q.includes("scheme") || q.includes("pension") || q.includes("subsidy") || q.includes("pmay")) {
-        answer = `Lakshmeshwar citizens can access several welfare schemes including PMAY-U Housing Subsidy, Gruha Lakshmi, PM-SVANidhi Street Vendor Credit, and Sandhya Suraksha pension.`;
-        link = "/schemes";
-        linkText = "Browse Welfare Schemes";
-      } else if (q.includes("track") || q.includes("status")) {
-        answer = `You can track any grievance or municipal application in real-time by entering your Tracking Reference ID (e.g. CMP-LMC-2026-... or LMC-APP-2026-...).`;
-        link = "/track";
-        linkText = "Open Tracking Desk";
-      } else {
-        answer = `Thank you for your question regarding Lakshmeshwar TMC civic administration. You can lodge an official complaint, apply for municipal certificates, or view announcements directly from your citizen portal.`;
-        link = "/services";
-        linkText = "View Citizen Services Directory";
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: "bot",
-          text: answer,
-          link,
-          linkText,
-        },
-      ]);
-      setThinking(false);
-    }, 500);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#071d1b] border border-gray-200 dark:border-gray-800 rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[85vh] overflow-hidden">
-        {/* Header */}
-        <div className="p-4 border-b border-gray-100 dark:border-gray-800 bg-[#042F2E] text-white flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-400/40 flex items-center justify-center text-teal-300">
-              <Bot className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="font-bold text-sm">Ask CivSetu Civic Assistant</h3>
-              <p className="text-[11px] text-teal-200">Lakshmeshwar TMC Automated Citizen Guidance</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-teal-800 text-teal-200 hover:text-white transition">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Message Body */}
-        <div className="flex-1 p-4 overflow-y-auto space-y-3 text-xs">
-          {messages.map((m, idx) => (
-            <div
-              key={idx}
-              className={`flex flex-col ${m.sender === "user" ? "items-end" : "items-start"}`}
-            >
-              <div
-                className={`max-w-[85%] p-3 rounded-2xl ${
-                  m.sender === "user"
-                    ? "bg-[#064E4A] text-white rounded-br-xs"
-                    : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-xs leading-relaxed"
-                }`}
-              >
-                <p>{m.text}</p>
-                {m.link && (
-                  <Link
-                    href={m.link}
-                    onClick={onClose}
-                    className="inline-flex items-center gap-1 mt-2 text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline bg-white dark:bg-gray-900 px-2.5 py-1 rounded-md border border-teal-200 dark:border-teal-800 shadow-xs"
-                  >
-                    <span>{m.linkText || "Learn more"}</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </Link>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {thinking && (
-            <div className="flex items-center gap-1.5 p-3 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-500 text-xs w-28">
-              <span className="w-2 h-2 rounded-full bg-teal-600 animate-pulse" />
-              <span className="w-2 h-2 rounded-full bg-teal-600 animate-pulse delay-75" />
-              <span className="w-2 h-2 rounded-full bg-teal-600 animate-pulse delay-150" />
-            </div>
-          )}
-          <div ref={chatBottomRef} />
-        </div>
-
-        {/* Suggested Queries */}
-        <div className="px-4 py-2 bg-gray-50 dark:bg-gray-800/40 border-t border-gray-100 dark:border-gray-800 flex items-center gap-1.5 overflow-x-auto text-[11px]">
-          <span className="text-gray-400 font-semibold flex-shrink-0">Try asking:</span>
-          {["Drinking water timings", "How to pay property tax", "Report broken streetlight", "Welfare schemes"].map(
-            (sugg) => (
-              <button
-                key={sugg}
-                type="button"
-                onClick={() => setQuery(sugg)}
-                className="px-2.5 py-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-[#064E4A] whitespace-nowrap transition"
-              >
-                {sugg}
-              </button>
-            )
-          )}
-        </div>
-
-        {/* Query Input */}
-        <form onSubmit={handleAsk} className="p-3 border-t border-gray-100 dark:border-gray-800 flex items-center gap-2">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Ask a question about Lakshmeshwar civic services..."
-            className="flex-1 px-3.5 py-2 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-[#064E4A]"
-          />
-          <button
-            type="submit"
-            disabled={!query.trim()}
-            className="p-2.5 bg-[#064E4A] hover:bg-[#0B6B63] disabled:opacity-50 text-white rounded-xl shadow-xs transition"
-          >
-            <Send className="w-4 h-4" />
-          </button>
-        </form>
-      </div>
-    </div>
-  );
+export interface CitizenNotification {
+  id: number;
+  eventType: string;
+  complaintId?: string | null;
+  citizenId?: string | null;
+  title: string;
+  message: string;
+  channel: string;
+  isRead: boolean;
+  createdAt: string;
 }
+
+import { AskCivSetuModal } from "@/components/AI/AskCivSetuModal";
+import { useTranslation } from "@/context/AccessibilityContext";
 
 // =============================================================================
 // Main Citizen Dashboard Component
@@ -238,6 +69,7 @@ function AskCivSetuModal({
 
 export default function DashboardPage() {
   const { citizen, loading: authLoading, isAuthenticated, logout } = useAuth();
+  const { t, language } = useTranslation();
 
   // Data states
   const [complaints, setComplaints] = useState<ComplaintRecord[]>([]);
@@ -250,7 +82,21 @@ export default function DashboardPage() {
 
   const [notices, setNotices] = useState<NoticeRecord[]>([]);
   const [noticesLoading, setNoticesLoading] = useState(true);
-  const [noticeTab, setNoticeTab] = useState<"ALL" | "COMPLAINT_UPDATES" | "MUNICIPAL" | "WARD" | "EMERGENCY">("ALL");
+  const [noticeTab, setNoticeTab] = useState<"ALL" | "COMPLAINT_UPDATES" | "WARD" | "EMERGENCY">("ALL");
+
+  const [notifications, setNotifications] = useState<CitizenNotification[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+
+  // Real-time live update states
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const [liveAlert, setLiveAlert] = useState<{
+    id: string;
+    type: string;
+    title: string;
+    message: string;
+    complaintId?: string;
+  } | null>(null);
 
   // Ask CivSetu Assistant Modal State
   const [askModalOpen, setAskModalOpen] = useState(false);
@@ -259,50 +105,54 @@ export default function DashboardPage() {
   // Fetch citizen data
   useEffect(() => {
     if (!citizen) return;
+    const citizenMobile = citizen.mobileNumber;
 
     let isMounted = true;
 
     async function loadDashboardData() {
-      // 1. Fetch citizen's filed complaints
       setComplaintsLoading(true);
-      try {
-        const res = await fetch("/api/complaints");
-        const json = await res.json();
-        if (isMounted && json.success && Array.isArray(json.data)) {
-          setComplaints(json.data);
-        }
-      } catch (err) {
-        console.error("Failed to load citizen complaints:", err);
-      } finally {
-        if (isMounted) setComplaintsLoading(false);
-      }
-
-      // 2. Fetch citizen's service applications by registered mobile
       setApplicationsLoading(true);
-      try {
-        const res = await fetch(`/api/applications?mobile=${encodeURIComponent(citizen.mobileNumber)}`);
-        const json = await res.json();
-        if (isMounted && json.success && Array.isArray(json.data)) {
-          setApplications(json.data);
-        }
-      } catch (err) {
-        console.error("Failed to load citizen applications:", err);
-      } finally {
-        if (isMounted) setApplicationsLoading(false);
-      }
-
-      // 3. Fetch notices for notifications
       setNoticesLoading(true);
+      setNotificationsLoading(true);
+
       try {
-        const res = await fetch("/api/notices?limit=10");
-        const json = await res.json();
-        if (isMounted && json.success && Array.isArray(json.data)) {
-          setNotices(json.data);
+        const [complaintsRes, appsRes, noticesRes, notifsRes] = await Promise.allSettled([
+          fetch("/api/complaints").then((r) => r.json()),
+          fetch(`/api/applications?mobile=${encodeURIComponent(citizenMobile)}`).then((r) => r.json()),
+          fetch("/api/notices?limit=10").then((r) => r.json()),
+          fetch("/api/notifications?limit=25").then((r) => r.json()),
+        ]);
+
+        if (!isMounted) return;
+
+        if (complaintsRes.status === "fulfilled" && complaintsRes.value?.success && Array.isArray(complaintsRes.value?.data)) {
+          setComplaints(complaintsRes.value.data);
         }
+        setComplaintsLoading(false);
+
+        if (appsRes.status === "fulfilled" && appsRes.value?.success && Array.isArray(appsRes.value?.data)) {
+          setApplications(appsRes.value.data);
+        }
+        setApplicationsLoading(false);
+
+        if (noticesRes.status === "fulfilled" && noticesRes.value?.success && Array.isArray(noticesRes.value?.data)) {
+          setNotices(noticesRes.value.data);
+        }
+        setNoticesLoading(false);
+
+        if (notifsRes.status === "fulfilled" && notifsRes.value?.success && Array.isArray(notifsRes.value?.data)) {
+          setNotifications(notifsRes.value.data);
+          setUnreadNotificationsCount(notifsRes.value.unreadCount || 0);
+        }
+        setNotificationsLoading(false);
       } catch (err) {
-        console.error("Failed to load notices for notifications:", err);
-      } finally {
-        if (isMounted) setNoticesLoading(false);
+        console.error("Error loading dashboard data:", err);
+        if (isMounted) {
+          setComplaintsLoading(false);
+          setApplicationsLoading(false);
+          setNoticesLoading(false);
+          setNotificationsLoading(false);
+        }
       }
     }
 
@@ -312,6 +162,240 @@ export default function DashboardPage() {
       isMounted = false;
     };
   }, [citizen]);
+
+  const markNotificationRead = async (id: number) => {
+    try {
+      const res = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "mark_read", id }),
+      });
+      if (res.ok) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+        );
+        setUnreadNotificationsCount((prev) => Math.max(0, prev - 1));
+      }
+    } catch (err) {
+      console.error("Failed to mark notification read:", err);
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    try {
+      const res = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "mark_all_read" }),
+      });
+      if (res.ok) {
+        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+        setUnreadNotificationsCount(0);
+      }
+    } catch (err) {
+      console.error("Failed to mark all notifications read:", err);
+    }
+  };
+
+  // Real-Time SSE Listener for Citizen Dashboard
+  useEffect(() => {
+    if (!citizen) return;
+
+    let eventSource: EventSource | null = null;
+    let retryTimer: NodeJS.Timeout | null = null;
+
+    function connectSSE() {
+      try {
+        eventSource = new EventSource("/api/realtime/complaints");
+
+        eventSource.onopen = () => {
+          setRealtimeConnected(true);
+        };
+
+        // 1. Complaint Created (if submitted by this citizen)
+        eventSource.addEventListener("complaint_created", (event: MessageEvent) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && citizen && data.citizenId === citizen.id) {
+              setComplaints((prev) => {
+                if (prev.some((c) => c.id === data.id)) return prev;
+                return [data, ...prev];
+              });
+              setLiveAlert({
+                id: String(Date.now()),
+                type: "complaint_created",
+                title: "Grievance Lodged Successfully",
+                message: `Ticket #${data.id} has been registered with Lakshmeshwar TMC.`,
+                complaintId: data.id,
+              });
+            }
+          } catch (e) {
+            console.error("Error in SSE complaint_created:", e);
+          }
+        });
+
+        // 2. Complaint Updated / Assigned / Escalated
+        eventSource.addEventListener("complaint_updated", (event: MessageEvent) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && data.complaintId) {
+              setComplaints((prev) =>
+                prev.map((c) => {
+                  if (c.id === data.complaintId) {
+                    return {
+                      ...c,
+                      status: data.status || c.status,
+                      assignedAuthority: data.assignedAuthority || c.assignedAuthority,
+                      authorityLevel: data.authorityLevel || c.authorityLevel,
+                      updatedAt: data.timestamp || new Date().toISOString(),
+                    };
+                  }
+                  return c;
+                })
+              );
+
+              // If this complaint belongs to the citizen, show live toast
+              setComplaints((currentComplaints) => {
+                const isMine = currentComplaints.some((c) => c.id === data.complaintId);
+                if (isMine) {
+                  setLiveAlert({
+                    id: String(Date.now()),
+                    type: "complaint_updated",
+                    title: `Complaint Updated: ${data.status || "Progressed"}`,
+                    message: `Ticket #${data.complaintId} has progressed to "${data.status}".`,
+                    complaintId: data.complaintId,
+                  });
+                }
+                return currentComplaints;
+              });
+
+              // Refresh notifications
+              fetch("/api/notifications?limit=25")
+                .then((r) => r.json())
+                .then((res) => {
+                  if (res?.success && Array.isArray(res.data)) {
+                    setNotifications(res.data);
+                    setUnreadNotificationsCount(res.unreadCount || 0);
+                  }
+                })
+                .catch(() => {});
+            }
+          } catch (e) {
+            console.error("Error in SSE complaint_updated:", e);
+          }
+        });
+
+        // 3. Complaint Resolved
+        eventSource.addEventListener("complaint_resolved", (event: MessageEvent) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && data.complaintId) {
+              setComplaints((prev) =>
+                prev.map((c) => {
+                  if (c.id === data.complaintId) {
+                    return {
+                      ...c,
+                      status: "Resolved",
+                      resolutionNotes: data.resolutionNotes || c.resolutionNotes,
+                      resolvedAt: data.resolvedAt || new Date().toISOString(),
+                    };
+                  }
+                  return c;
+                })
+              );
+
+              setComplaints((currentComplaints) => {
+                const isMine = currentComplaints.some((c) => c.id === data.complaintId);
+                if (isMine) {
+                  setLiveAlert({
+                    id: String(Date.now()),
+                    type: "complaint_resolved",
+                    title: "Grievance Resolved 🎉",
+                    message: `Ticket #${data.complaintId} has been resolved by Lakshmeshwar TMC.`,
+                    complaintId: data.complaintId,
+                  });
+                }
+                return currentComplaints;
+              });
+
+              fetch("/api/notifications?limit=25")
+                .then((r) => r.json())
+                .then((res) => {
+                  if (res?.success && Array.isArray(res.data)) {
+                    setNotifications(res.data);
+                    setUnreadNotificationsCount(res.unreadCount || 0);
+                  }
+                })
+                .catch(() => {});
+            }
+          } catch (e) {
+            console.error("Error in SSE complaint_resolved:", e);
+          }
+        });
+
+        // 4. Notice / Emergency Broadcast
+        eventSource.addEventListener("notice_published", (event: MessageEvent) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data) {
+              setLiveAlert({
+                id: String(Date.now()),
+                type: "notice_published",
+                title: data.isEmergency ? "🚨 Emergency Broadcast" : "📢 Important Municipal Notice",
+                message: data.title,
+              });
+              fetch("/api/notices?limit=10")
+                .then((r) => r.json())
+                .then((res) => {
+                  if (res?.success && Array.isArray(res.data)) {
+                    setNotices(res.data);
+                  }
+                })
+                .catch(() => {});
+            }
+          } catch (e) {
+            console.error("Error in SSE notice_published:", e);
+          }
+        });
+
+        eventSource.onerror = () => {
+          setRealtimeConnected(false);
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          if (!retryTimer) {
+            retryTimer = setTimeout(() => {
+              retryTimer = null;
+              connectSSE();
+            }, 5000);
+          }
+        };
+      } catch (err) {
+        console.error("SSE connection error:", err);
+        setRealtimeConnected(false);
+      }
+    }
+
+    connectSSE();
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+    };
+  }, [citizen]);
+
+  // Auto-dismiss citizen live alert
+  useEffect(() => {
+    if (liveAlert) {
+      const timer = setTimeout(() => setLiveAlert(null), 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [liveAlert]);
 
   // Loading state
   if (authLoading) {
@@ -433,6 +517,47 @@ export default function DashboardPage() {
       subtitle={`Welcome, ${citizen.fullName} | Lakshmeshwar Town Municipal Council`}
       breadcrumbs={[{ label: "Citizen Portal" }]}
     >
+      {/* Floating Live Real-Time Alert Toast */}
+      {liveAlert && (
+        <div className="fixed top-16 right-4 z-50 max-w-sm w-full bg-white dark:bg-gray-900 border-2 border-emerald-500 rounded-xl shadow-2xl p-4 animate-in slide-in-from-top-4 duration-300">
+          <div className="flex items-start justify-between gap-2.5">
+            <div className="flex items-start gap-2.5">
+              <span className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400">
+                <Bell className="w-5 h-5 animate-bounce" />
+              </span>
+              <div>
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                  Live Update
+                </span>
+                <h4 className="text-xs font-bold text-gray-900 dark:text-white mt-0.5">
+                  {liveAlert.title}
+                </h4>
+                <p className="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">
+                  {liveAlert.message}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLiveAlert(null)}
+              className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {liveAlert.complaintId && (
+            <div className="mt-2 text-right">
+              <Link
+                href={`/complaints/${liveAlert.complaintId}`}
+                className="text-xs font-bold text-emerald-600 hover:underline"
+              >
+                Track Ticket &rarr;
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto py-2 sm:py-4 space-y-6">
         {/* ========================================================================= */}
         {/* TOP QUICK ACTIONS TOOLBAR                                                 */}
@@ -444,13 +569,16 @@ export default function DashboardPage() {
                 Lakshmeshwar Citizen Workspace
               </span>
               <h2 className="text-base sm:text-lg font-bold text-white mt-1">
-                Civic Quick Actions & Services
+                {t.dashboard?.quickActions || "Civic Quick Actions & Services"}
               </h2>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className={`w-2.5 h-2.5 rounded-full ${realtimeConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
               <span className="text-xs text-teal-200 font-semibold">{citizen.wardNumber}</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-bold hidden sm:inline">
+                {realtimeConnected ? "Live Sync Active" : "Connecting..."}
+              </span>
             </div>
           </div>
 
@@ -460,7 +588,7 @@ export default function DashboardPage() {
               className="p-3 rounded-xl bg-white/10 hover:bg-white/20 transition flex flex-col items-center justify-center text-center gap-1.5 font-bold shadow-xs border border-white/10"
             >
               <PlusCircle className="w-4 h-4 text-emerald-300" />
-              <span>Report Complaint</span>
+              <span>{t.dashboard?.reportComplaint || "Report Complaint"}</span>
             </Link>
 
             <Link
@@ -468,7 +596,7 @@ export default function DashboardPage() {
               className="p-3 rounded-xl bg-white/10 hover:bg-white/20 transition flex flex-col items-center justify-center text-center gap-1.5 font-bold shadow-xs border border-white/10"
             >
               <Search className="w-4 h-4 text-amber-300" />
-              <span>Track Complaint</span>
+              <span>{t.dashboard?.trackGrievance || "Track Complaint"}</span>
             </Link>
 
             <Link
@@ -476,7 +604,7 @@ export default function DashboardPage() {
               className="p-3 rounded-xl bg-white/10 hover:bg-white/20 transition flex flex-col items-center justify-center text-center gap-1.5 font-bold shadow-xs border border-white/10"
             >
               <Bell className="w-4 h-4 text-cyan-300" />
-              <span>Announcements</span>
+              <span>{t.dashboard?.viewNotices || "Announcements"}</span>
             </Link>
 
             <button
@@ -485,7 +613,7 @@ export default function DashboardPage() {
               className="p-3 rounded-xl bg-teal-400/20 hover:bg-teal-400/30 border border-teal-300/30 transition flex flex-col items-center justify-center text-center gap-1.5 font-bold shadow-xs text-teal-100"
             >
               <Bot className="w-4 h-4 text-amber-300" />
-              <span>Ask CivSetu</span>
+              <span>{t.dashboard?.askAssistant || "Ask CivSetu"}</span>
             </button>
 
             <button
@@ -494,7 +622,7 @@ export default function DashboardPage() {
               className="col-span-2 sm:col-span-1 p-3 rounded-xl bg-white/10 hover:bg-white/20 transition flex flex-col items-center justify-center text-center gap-1.5 font-bold shadow-xs border border-white/10"
             >
               <User className="w-4 h-4 text-purple-300" />
-              <span>My Profile</span>
+              <span>{t.dashboard?.myProfile || "My Profile"}</span>
             </button>
           </div>
         </div>
@@ -532,7 +660,7 @@ export default function DashboardPage() {
               title="Sign Out of Citizen Portal"
             >
               <LogOut className="w-3.5 h-3.5" />
-              <span>Logout</span>
+              <span>{t.nav?.logout || "Logout"}</span>
             </button>
           </div>
 
@@ -541,7 +669,7 @@ export default function DashboardPage() {
             <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 space-y-1">
               <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-[11px] font-medium">
                 <Phone className="w-3.5 h-3.5 text-[#064E4A] dark:text-teal-400" />
-                <span>Registered Mobile</span>
+                <span>{t.forms?.mobileNumber || "Registered Mobile"}</span>
               </div>
               <div className="flex items-center gap-1.5 font-semibold text-gray-900 dark:text-gray-100 font-mono">
                 <span>+91 {citizen.mobileNumber}</span>
@@ -553,7 +681,7 @@ export default function DashboardPage() {
             <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 space-y-1">
               <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-[11px] font-medium">
                 <Mail className="w-3.5 h-3.5 text-[#064E4A] dark:text-teal-400" />
-                <span>Email Address</span>
+                <span>{t.forms?.emailAddress || "Email Address"}</span>
               </div>
               <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">
                 {citizen.email}
@@ -564,7 +692,7 @@ export default function DashboardPage() {
             <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 space-y-1">
               <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-[11px] font-medium">
                 <MapPin className="w-3.5 h-3.5 text-[#064E4A] dark:text-teal-400" />
-                <span>Jurisdiction Ward</span>
+                <span>{t.forms?.wardNumber || "Jurisdiction Ward"}</span>
               </div>
               <p className="font-semibold text-gray-900 dark:text-gray-100">
                 {citizen.wardNumber}
@@ -575,7 +703,7 @@ export default function DashboardPage() {
             <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 space-y-1">
               <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 text-[11px] font-medium">
                 <Home className="w-3.5 h-3.5 text-[#064E4A] dark:text-teal-400" />
-                <span>Residential Address</span>
+                <span>{t.forms?.streetAddress || "Residential Address"}</span>
               </div>
               <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">
                 {citizen.residentialAddress}
@@ -592,7 +720,7 @@ export default function DashboardPage() {
             <div>
               <h3 className="font-bold text-base text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-[#064E4A] dark:text-teal-400" />
-                <span>My Registered Grievances ({complaintStats.total})</span>
+                <span>{t.dashboard?.myComplaints || "My Grievances"} ({complaintStats.total})</span>
               </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 Complaints lodged under Lakshmeshwar TMC statutory SLA resolution
@@ -604,39 +732,39 @@ export default function DashboardPage() {
               className="px-3.5 py-1.5 bg-[#064E4A] hover:bg-[#0B6B63] text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center gap-1.5 self-start sm:self-center"
             >
               <PlusCircle className="w-3.5 h-3.5" />
-              <span>New Grievance</span>
+              <span>{t.buttons?.reportComplaint || "New Grievance"}</span>
             </Link>
           </div>
 
           {/* 6 Complaints Stat Counters: total, submitted, under review, in progress, escalated, resolved */}
           <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs">
             <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800">
-              <span className="text-[10px] font-bold text-gray-500 block uppercase">Total</span>
+              <span className="text-[10px] font-bold text-gray-500 block uppercase">{t.dashboard?.statsTotal || "Total"}</span>
               <span className="text-lg font-extrabold text-gray-900 dark:text-gray-100">{complaintStats.total}</span>
             </div>
 
             <div className="p-3 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-900">
-              <span className="text-[10px] font-bold text-teal-800 dark:text-teal-300 block uppercase">Submitted</span>
+              <span className="text-[10px] font-bold text-teal-800 dark:text-teal-300 block uppercase">{t.dashboard?.statsSubmitted || "Submitted"}</span>
               <span className="text-lg font-extrabold text-teal-800 dark:text-teal-300">{complaintStats.submitted}</span>
             </div>
 
             <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900">
-              <span className="text-[10px] font-bold text-blue-800 dark:text-blue-300 block uppercase">Under Review</span>
+              <span className="text-[10px] font-bold text-blue-800 dark:text-blue-300 block uppercase">{t.dashboard?.statsUnderReview || "Under Review"}</span>
               <span className="text-lg font-extrabold text-blue-800 dark:text-blue-300">{complaintStats.underReview}</span>
             </div>
 
             <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900">
-              <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 block uppercase">In Progress</span>
+              <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 block uppercase">{t.dashboard?.statsInProgress || "In Progress"}</span>
               <span className="text-lg font-extrabold text-amber-800 dark:text-amber-300">{complaintStats.inProgress}</span>
             </div>
 
             <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900">
-              <span className="text-[10px] font-bold text-rose-800 dark:text-rose-300 block uppercase">Escalated</span>
+              <span className="text-[10px] font-bold text-rose-800 dark:text-rose-300 block uppercase">{t.dashboard?.statsEscalated || "Escalated"}</span>
               <span className="text-lg font-extrabold text-rose-800 dark:text-rose-300">{complaintStats.escalated}</span>
             </div>
 
             <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900">
-              <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 block uppercase">Resolved</span>
+              <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 block uppercase">{t.dashboard?.statsResolved || "Resolved"}</span>
               <span className="text-lg font-extrabold text-emerald-800 dark:text-emerald-300">{complaintStats.resolved}</span>
             </div>
           </div>
@@ -769,8 +897,8 @@ export default function DashboardPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100 dark:border-gray-800">
             <div>
               <h3 className="font-bold text-base text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                <FileCheck className="w-4 h-4 text-[#064E4A] dark:text-teal-400" />
-                <span>My Statutory Service Applications ({applicationStats.total})</span>
+                <FileText className="w-4 h-4 text-[#064E4A] dark:text-teal-400" />
+                <span>{t.dashboard?.myApplications || "My Statutory Service Applications"} ({applicationStats.total})</span>
               </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 Water connections, khata mutations, trade licenses, and statutory permits
@@ -782,29 +910,29 @@ export default function DashboardPage() {
               className="px-3.5 py-1.5 bg-[#064E4A] hover:bg-[#0B6B63] text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center gap-1.5 self-start sm:self-center"
             >
               <PlusCircle className="w-3.5 h-3.5" />
-              <span>New Application</span>
+              <span>{t.buttons?.applyNow || "New Application"}</span>
             </Link>
           </div>
 
           {/* 4 Application Stat Counters: pending, approved, rejected, completed */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
             <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900">
-              <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 block uppercase">Pending Review</span>
+              <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 block uppercase">{t.dashboard?.pending || "Pending"}</span>
               <span className="text-lg font-extrabold text-amber-800 dark:text-amber-300">{applicationStats.pending}</span>
             </div>
 
             <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900">
-              <span className="text-[10px] font-bold text-blue-800 dark:text-blue-300 block uppercase">Approved</span>
+              <span className="text-[10px] font-bold text-blue-800 dark:text-blue-300 block uppercase">{t.dashboard?.approved || "Approved"}</span>
               <span className="text-lg font-extrabold text-blue-800 dark:text-blue-300">{applicationStats.approved}</span>
             </div>
 
             <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900">
-              <span className="text-[10px] font-bold text-rose-800 dark:text-rose-300 block uppercase">Rejected</span>
+              <span className="text-[10px] font-bold text-rose-800 dark:text-rose-300 block uppercase">{t.dashboard?.rejected || "Rejected"}</span>
               <span className="text-lg font-extrabold text-rose-800 dark:text-rose-300">{applicationStats.rejected}</span>
             </div>
 
             <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900">
-              <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 block uppercase">Completed</span>
+              <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 block uppercase">{t.dashboard?.completed || "Completed"}</span>
               <span className="text-lg font-extrabold text-emerald-800 dark:text-emerald-300">{applicationStats.completed}</span>
             </div>
           </div>
@@ -817,7 +945,7 @@ export default function DashboardPage() {
             </div>
           ) : filteredApplications.length === 0 ? (
             <div className="py-8 text-center space-y-3 bg-gray-50 dark:bg-gray-800/30 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
-              <FileCheck className="w-8 h-8 text-gray-400 mx-auto" />
+              <FileText className="w-8 h-8 text-gray-400 mx-auto" />
               <div className="space-y-1">
                 <p className="font-bold text-xs sm:text-sm text-gray-700 dark:text-gray-300">
                   No service applications filed yet.
@@ -900,105 +1028,212 @@ export default function DashboardPage() {
             <div>
               <h3 className="font-bold text-base text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <Bell className="w-4 h-4 text-[#064E4A] dark:text-teal-400" />
-                <span>Civic Notifications & Gazette Bulletins</span>
+                <span>{t.dashboard?.notifications || "Civic Notifications"} & Bulletins</span>
               </h3>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                Grievance status updates, municipal notices, ward circulars, and emergency alerts
+                {t.notifications?.subtitle || "Grievance status updates, municipal notices, ward circulars, and emergency alerts"}
               </p>
             </div>
 
-            <Link
-              href="/notices"
-              className="text-xs font-bold text-[#064E4A] dark:text-teal-300 hover:underline flex items-center gap-1"
-            >
-              <span>View All Gazette</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/notifications"
+                className="text-xs font-bold text-[#064E4A] dark:text-teal-300 hover:underline flex items-center gap-1"
+              >
+                <span>{t.notifications?.title || "Notification Center"}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           </div>
 
-          {/* 4 Tabs: All Notifications, Municipal Notices, Ward Announcements, Emergency Alerts */}
-          <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <button
-              onClick={() => setNoticeTab("ALL")}
-              className={`px-3 py-1 rounded-lg font-bold transition ${
-                noticeTab === "ALL"
-                  ? "bg-[#064E4A] text-white"
-                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-              }`}
-            >
-              All Updates
-            </button>
-            <button
-              onClick={() => setNoticeTab("COMPLAINT_UPDATES")}
-              className={`px-3 py-1 rounded-lg font-bold transition ${
-                noticeTab === "COMPLAINT_UPDATES"
-                  ? "bg-[#064E4A] text-white"
-                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-              }`}
-            >
-              Complaint Updates ({complaints.length})
-            </button>
-            <button
-              onClick={() => setNoticeTab("WARD")}
-              className={`px-3 py-1 rounded-lg font-bold transition ${
-                noticeTab === "WARD"
-                  ? "bg-[#064E4A] text-white"
-                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-              }`}
-            >
-              {citizen.wardNumber} ({wardNotices.length})
-            </button>
-            <button
-              onClick={() => setNoticeTab("EMERGENCY")}
-              className={`px-3 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
-                noticeTab === "EMERGENCY"
-                  ? "bg-rose-700 text-white"
-                  : "bg-gray-100 dark:bg-gray-800 text-rose-600 dark:text-rose-400"
-              }`}
-            >
-              <AlertTriangle className="w-3.5 h-3.5" />
-              <span>Emergency Alerts ({emergencyNotices.length})</span>
-            </button>
+          {/* 4 Tabs: All Notifications, Complaint Updates, Ward Announcements, Emergency Alerts */}
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                onClick={() => setNoticeTab("ALL")}
+                className={`px-3 py-1 rounded-lg font-bold transition ${
+                  noticeTab === "ALL"
+                    ? "bg-[#064E4A] text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                }`}
+              >
+                {t.notifications?.all || "All Updates"}
+              </button>
+              <button
+                onClick={() => setNoticeTab("COMPLAINT_UPDATES")}
+                className={`px-3 py-1 rounded-lg font-bold transition flex items-center gap-1.5 ${
+                  noticeTab === "COMPLAINT_UPDATES"
+                    ? "bg-[#064E4A] text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                }`}
+              >
+                <span>{t.dashboard?.myComplaints || "Complaint Updates"}</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/10 dark:bg-white/10">
+                  {notifications.length}
+                </span>
+                {unreadNotificationsCount > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                )}
+              </button>
+              <button
+                onClick={() => setNoticeTab("WARD")}
+                className={`px-3 py-1 rounded-lg font-bold transition ${
+                  noticeTab === "WARD"
+                    ? "bg-[#064E4A] text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+                }`}
+              >
+                {citizen.wardNumber} ({wardNotices.length})
+              </button>
+              <button
+                onClick={() => setNoticeTab("EMERGENCY")}
+                className={`px-3 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
+                  noticeTab === "EMERGENCY"
+                    ? "bg-rose-700 text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-rose-600 dark:text-rose-400"
+                }`}
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Emergency Alerts ({emergencyNotices.length})</span>
+              </button>
+            </div>
+
+            {noticeTab === "COMPLAINT_UPDATES" && unreadNotificationsCount > 0 && (
+              <button
+                onClick={markAllNotificationsRead}
+                className="text-[11px] font-bold text-teal-700 dark:text-teal-300 hover:underline flex items-center gap-1"
+              >
+                <CheckCheck className="w-3.5 h-3.5" />
+                <span>Mark All Read</span>
+              </button>
+            )}
           </div>
 
           {/* Notification List */}
           <div className="space-y-3 pt-1">
             {noticeTab === "COMPLAINT_UPDATES" ? (
-              complaints.length === 0 ? (
-                <p className="text-xs text-gray-500 py-4 text-center">No active complaint updates available.</p>
+              notificationsLoading ? (
+                <div className="py-8 text-center text-xs text-gray-500 space-y-2">
+                  <RefreshCw className="w-5 h-5 animate-spin mx-auto text-[#064E4A] dark:text-teal-400" />
+                  <p>Loading your complaint notifications...</p>
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="py-8 text-center space-y-2 text-xs text-gray-500 bg-gray-50 dark:bg-gray-800/20 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
+                  <Bell className="w-6 h-6 text-gray-400 mx-auto" />
+                  <p className="font-bold text-gray-700 dark:text-gray-300">No grievance notifications yet</p>
+                  <p className="text-[11px]">When you file a complaint, updates on acceptance, assignment, escalation, and resolution will appear here.</p>
+                </div>
               ) : (
-                complaints.slice(0, 5).map((c) => (
-                  <div
-                    key={c.id}
-                    className="p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-teal-50/40 dark:bg-teal-950/20 flex items-start gap-3 text-xs"
-                  >
-                    <div className="p-2 rounded-lg bg-teal-100 dark:bg-teal-950 text-[#064E4A] dark:text-teal-400 flex-shrink-0 mt-0.5">
-                      <FileText className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-gray-900 dark:text-gray-100">
-                          Complaint #{c.id} Status: {c.status}
-                        </span>
-                        <span className="text-[10px] text-gray-400 font-mono">
-                          {new Date(c.updatedAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className="text-gray-600 dark:text-gray-400 mt-0.5">{c.title}</p>
-                      {c.resolutionNotes && (
-                        <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1 font-semibold">
-                          Resolution: {c.resolutionNotes}
-                        </p>
-                      )}
-                    </div>
-                    <Link
-                      href={`/track?id=${encodeURIComponent(c.id)}`}
-                      className="px-2.5 py-1 text-[11px] font-bold text-[#064E4A] dark:text-teal-300 hover:underline flex-shrink-0"
+                notifications.slice(0, 6).map((n) => {
+                  let badge = {
+                    label: "Update",
+                    color: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-300",
+                    icon: Bell,
+                  };
+
+                  if (n.eventType === "COMPLAINT_REGISTERED") {
+                    badge = {
+                      label: "Submitted",
+                      color: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border-sky-300",
+                      icon: FileText,
+                    };
+                  } else if (n.eventType === "COMPLAINT_ACCEPTED") {
+                    badge = {
+                      label: "Accepted",
+                      color: "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border-teal-300",
+                      icon: CheckCircle2,
+                    };
+                  } else if (n.eventType === "ASSIGNED") {
+                    badge = {
+                      label: "Assigned",
+                      color: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-300",
+                      icon: UserCheck,
+                    };
+                  } else if (n.eventType === "ESCALATED") {
+                    badge = {
+                      label: "Escalated",
+                      color: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300 animate-pulse",
+                      icon: ShieldAlert,
+                    };
+                  } else if (n.eventType === "RESOLVED") {
+                    badge = {
+                      label: "Resolved",
+                      color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300",
+                      icon: CheckCheck,
+                    };
+                  } else if (n.eventType === "REMARK_ADDED") {
+                    badge = {
+                      label: "Official Note",
+                      color: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300",
+                      icon: MessageSquare,
+                    };
+                  }
+
+                  const BadgeIcon = badge.icon;
+
+                  return (
+                    <div
+                      key={n.id}
+                      className={`p-3.5 rounded-xl border flex items-start gap-3 text-xs transition ${
+                        !n.isRead
+                          ? "bg-teal-50/50 dark:bg-teal-950/20 border-teal-200 dark:border-teal-800"
+                          : "bg-gray-50/50 dark:bg-gray-800/20 border-gray-100 dark:border-gray-800"
+                      }`}
                     >
-                      Track
-                    </Link>
-                  </div>
-                ))
+                      <div className={`p-2 rounded-lg flex-shrink-0 mt-0.5 border ${badge.color}`}>
+                        <BadgeIcon className="w-4 h-4" />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badge.color}`}>
+                            {badge.label}
+                          </span>
+                          <span className="font-bold text-gray-900 dark:text-gray-100">
+                            {n.title}
+                          </span>
+                          {!n.isRead && (
+                            <span className="w-2 h-2 rounded-full bg-teal-600" title="Unread" />
+                          )}
+                        </div>
+
+                        <p className="text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                          {n.message}
+                        </p>
+
+                        <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-400">
+                          <span>{new Date(n.createdAt).toLocaleString("en-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                          {n.complaintId && (
+                            <span>• Complaint #{n.complaintId}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-2 flex-shrink-0 self-center">
+                        {n.complaintId && (
+                          <Link
+                            href={`/track?id=${encodeURIComponent(n.complaintId)}`}
+                            onClick={() => {
+                              if (!n.isRead) markNotificationRead(n.id);
+                            }}
+                            className="px-2.5 py-1 text-[11px] font-bold text-[#064E4A] dark:text-teal-300 hover:underline flex items-center gap-0.5"
+                          >
+                            <span>Track</span>
+                            <ArrowRight className="w-3 h-3" />
+                          </Link>
+                        )}
+                        {!n.isRead && (
+                          <button
+                            onClick={() => markNotificationRead(n.id)}
+                            className="text-[10px] text-gray-500 hover:text-gray-900 dark:hover:text-gray-200 underline"
+                          >
+                            Mark read
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
               )
             ) : (
               (noticeTab === "WARD"
@@ -1038,7 +1273,7 @@ export default function DashboardPage() {
                       </div>
                       <p className="text-gray-500 line-clamp-2 mt-0.5">{n.description}</p>
                       <p className="text-[10px] text-gray-400 mt-1 font-mono">
-                        Published: {new Date(n.publishedAt).toLocaleDateString()} • Target: {n.targetWards || n.targetScope}
+                        Published: {new Date(n.publishDate).toLocaleDateString()} • Target: {n.targetWards || n.targetScope}
                       </p>
                     </div>
 

@@ -143,6 +143,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       items: [
         { name: "Complaints", href: "/admin/complaints", icon: FileText },
         { name: "Applications", href: "/admin/applications", icon: FileCheck },
+        { name: "Notifications", href: "/admin/notifications", icon: Bell },
         { name: "Complaint Categories", href: "/admin/complaint-categories", icon: Tags },
         { name: "Escalation Settings", href: "/admin/escalation-settings", icon: GitFork },
       ],
@@ -364,7 +365,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         )}
 
         {/* Main Content Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+        <main className="flex-1 min-w-0 w-full p-3 sm:p-6 lg:p-8 overflow-y-auto">
           {children}
         </main>
       </div>

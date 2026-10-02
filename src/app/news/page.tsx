@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
@@ -35,7 +35,7 @@ function NewsContent() {
   const urlWard = searchParams?.get("ward") || "";
   const urlCategory = searchParams?.get("category") || "ALL";
 
-  const [articles, setArticles] = useState<NewsArticle[]>([]);
+  const [allArticles, setAllArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -53,30 +53,46 @@ function NewsContent() {
   const fetchArticles = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (activeCategory !== "ALL") params.set("category", activeCategory);
-      if (selectedWard !== "ALL") params.set("ward", selectedWard);
-      if (search.trim()) params.set("search", search.trim());
-      params.set("limit", "50");
-
-      const res = await fetch(`/api/news?${params.toString()}`);
+      const res = await fetch("/api/news?limit=100");
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
-        setArticles(json.data);
+        setAllArticles(json.data);
       }
     } catch (err) {
       console.error("Failed to load news articles:", err);
     } finally {
       setLoading(false);
     }
-  }, [activeCategory, selectedWard, search]);
+  }, []);
 
   useEffect(() => {
     fetchArticles();
   }, [fetchArticles]);
 
-  const featuredStory = articles.length > 0 ? articles[0] : null;
-  const remainingStories = articles.length > 1 ? articles.slice(1) : [];
+  // Instant zero-latency filter on category click or search
+  const filteredArticles = useMemo(() => {
+    return allArticles.filter((a) => {
+      if (activeCategory !== "ALL" && a.category !== activeCategory) return false;
+      if (selectedWard !== "ALL") {
+        const wStr = selectedWard.toLowerCase();
+        const tWard = (a.wardRelevance || "").toLowerCase();
+        const match = tWard.includes(wStr) || tWard.includes("all wards");
+        if (!match) return false;
+      }
+      if (search.trim()) {
+        const q = search.trim().toLowerCase();
+        const inHead = a.headline.toLowerCase().includes(q);
+        const inSum = a.summary.toLowerCase().includes(q);
+        const inArt = a.article.toLowerCase().includes(q);
+        const inWard = (a.wardRelevance || "").toLowerCase().includes(q);
+        return inHead || inSum || inArt || inWard;
+      }
+      return true;
+    });
+  }, [allArticles, activeCategory, selectedWard, search]);
+
+  const featuredStory = filteredArticles.length > 0 ? filteredArticles[0] : null;
+  const remainingStories = filteredArticles.length > 1 ? filteredArticles.slice(1) : [];
 
   const isCitizenWardMatch = (wardRelevance: string): boolean => {
     if (!isAuthenticated || !citizen?.wardNumber) return false;
@@ -229,7 +245,7 @@ function NewsContent() {
           <RefreshCw className="w-8 h-8 animate-spin mx-auto text-teal-600" />
           <p className="text-xs text-gray-500">Loading verified town news...</p>
         </div>
-      ) : articles.length === 0 ? (
+      ) : filteredArticles.length === 0 ? (
         <div className="p-16 text-center bg-white dark:bg-[#061817] rounded-2xl border border-gray-200 dark:border-gray-800 space-y-3">
           <Newspaper className="w-10 h-10 text-gray-300 mx-auto" />
           <h3 className="font-bold text-base text-gray-800 dark:text-gray-200">

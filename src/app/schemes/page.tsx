@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -18,9 +18,9 @@ import {
   Filter,
   Award,
   Sparkles,
-  AlertCircle,
   HelpCircle,
 } from "lucide-react";
+import { VoiceInputButton } from "@/components/Voice/VoiceInputButton";
 import {
   GovernmentScheme,
   SCHEME_CATEGORIES,
@@ -33,7 +33,7 @@ function SchemesContent() {
   const urlCategory = searchParams?.get("category") || "ALL";
   const urlDepartment = searchParams?.get("department") || "ALL";
 
-  const [schemes, setSchemes] = useState<GovernmentScheme[]>([]);
+  const [allSchemes, setAllSchemes] = useState<GovernmentScheme[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -44,27 +44,39 @@ function SchemesContent() {
   const fetchSchemes = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (activeCategory !== "ALL") params.set("category", activeCategory);
-      if (selectedDepartment !== "ALL") params.set("department", selectedDepartment);
-      if (search.trim()) params.set("search", search.trim());
-      params.set("limit", "50");
-
-      const res = await fetch(`/api/schemes?${params.toString()}`);
+      const res = await fetch("/api/schemes?limit=100");
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
-        setSchemes(json.data);
+        setAllSchemes(json.data);
       }
     } catch (err) {
       console.error("Failed to load government schemes:", err);
     } finally {
       setLoading(false);
     }
-  }, [activeCategory, selectedDepartment, search]);
+  }, []);
 
   useEffect(() => {
     fetchSchemes();
   }, [fetchSchemes]);
+
+  // Instant zero-latency filter on button click or keystroke
+  const filteredSchemes = useMemo(() => {
+    return allSchemes.filter((s) => {
+      if (activeCategory !== "ALL" && s.category !== activeCategory) return false;
+      if (selectedDepartment !== "ALL" && s.department !== selectedDepartment) return false;
+      if (search.trim()) {
+        const q = search.trim().toLowerCase();
+        const inName = s.name.toLowerCase().includes(q);
+        const inDesc = s.description.toLowerCase().includes(q);
+        const inDept = s.department.toLowerCase().includes(q);
+        const inElig = s.eligibility.toLowerCase().includes(q);
+        const inBen = s.benefits.toLowerCase().includes(q);
+        return inName || inDesc || inDept || inElig || inBen;
+      }
+      return true;
+    });
+  }, [allSchemes, activeCategory, selectedDepartment, search]);
 
   return (
     <div className="max-w-[1380px] mx-auto px-4 py-6 space-y-8">
@@ -87,7 +99,7 @@ function SchemesContent() {
         <div className="mt-5 pt-4 border-t border-teal-600/40 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div>
             <span className="text-teal-200 block text-[11px]">Active Schemes</span>
-            <strong className="text-base text-white font-bold">{schemes.length} Programs</strong>
+            <strong className="text-base text-white font-bold">{filteredSchemes.length} Programs</strong>
           </div>
           <div>
             <span className="text-teal-200 block text-[11px]">Coverage</span>
@@ -108,15 +120,22 @@ function SchemesContent() {
       <div className="bg-white dark:bg-[#071d1b] border border-gray-200 dark:border-gray-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
           {/* Keyword Search */}
-          <div className="md:col-span-6 relative">
+          <div className="md:col-span-6 relative flex items-center">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search scheme name, eligibility, benefits, or department..."
-              className="w-full pl-9 pr-4 py-2.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#064E4A]"
+              className="w-full pl-9 pr-12 py-2.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#064E4A]"
             />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+              <VoiceInputButton
+                size="sm"
+                onTranscript={(text) => setSearch((prev) => (prev ? `${prev} ${text}` : text))}
+                ariaLabel="Search government welfare schemes using microphone voice input"
+              />
+            </div>
           </div>
 
           {/* Category Dropdown */}
@@ -189,7 +208,7 @@ function SchemesContent() {
           <RefreshCw className="w-8 h-8 text-[#064E4A] dark:text-teal-400 animate-spin mx-auto" />
           <p className="text-sm text-gray-500 dark:text-gray-400">Loading government schemes directory...</p>
         </div>
-      ) : schemes.length === 0 ? (
+      ) : filteredSchemes.length === 0 ? (
         <div className="bg-white dark:bg-[#071d1b] border border-gray-200 dark:border-gray-800 rounded-2xl p-10 text-center space-y-4">
           <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 flex items-center justify-center mx-auto">
             <Landmark className="w-6 h-6" />
@@ -215,7 +234,7 @@ function SchemesContent() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {schemes.map((scheme) => (
+          {filteredSchemes.map((scheme) => (
             <div
               key={scheme.id}
               className="bg-white dark:bg-[#071d1b] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm hover:shadow-md transition flex flex-col justify-between space-y-5 group"

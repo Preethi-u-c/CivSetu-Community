@@ -88,11 +88,22 @@ export function extractWardNumber(wardStr: string): number | null {
   return match ? parseInt(match[0], 10) : null;
 }
 
+let cachedPublicNotices: NoticeRecord[] | null = null;
+let cachedEmergencyNotices: NoticeRecord[] | null = null;
+let cacheExpiry = 0;
+
+export function invalidateNoticesCache(): void {
+  cachedPublicNotices = null;
+  cachedEmergencyNotices = null;
+  cacheExpiry = 0;
+}
+
 export const noticeDb = {
   /**
    * Creates a new official municipal notice in PostgreSQL
    */
   async create(params: CreateNoticeParams): Promise<NoticeRecord> {
+    invalidateNoticesCache();
     await ensurePostgresTables();
     const pool = getPool();
 
@@ -290,6 +301,7 @@ export const noticeDb = {
    * Updates an existing notice
    */
   async update(id: string, updates: Partial<NoticeRecord>): Promise<NoticeRecord> {
+    invalidateNoticesCache();
     await ensurePostgresTables();
     const pool = getPool();
 
@@ -361,6 +373,7 @@ export const noticeDb = {
    * Deletes a notice
    */
   async delete(id: string): Promise<boolean> {
+    invalidateNoticesCache();
     await ensurePostgresTables();
     const pool = getPool();
     const res = await pool.query("DELETE FROM notices WHERE id = $1;", [id.trim()]);
@@ -399,11 +412,38 @@ export const noticeDb = {
   async listPublic(
     optionsOrLimit: number | PublicNoticeFilterOptions = 20
   ): Promise<NoticeRecord[]> {
-    await ensurePostgresTables();
-    const pool = getPool();
-
     const options: PublicNoticeFilterOptions =
       typeof optionsOrLimit === "number" ? { limit: optionsOrLimit } : optionsOrLimit;
+
+    const isStandardPublic =
+      (!options.category || options.category === "ALL") &&
+      (!options.priority || options.priority === "ALL") &&
+      options.isEmergency === undefined &&
+      (!options.ward || options.ward === "ALL") &&
+      (!options.search || !options.search.trim()) &&
+      (!options.offset || options.offset === 0);
+
+    const isEmergencyOnly =
+      options.isEmergency === true &&
+      (!options.category || options.category === "ALL") &&
+      (!options.priority || options.priority === "ALL") &&
+      (!options.ward || options.ward === "ALL") &&
+      (!options.search || !options.search.trim()) &&
+      (!options.offset || options.offset === 0);
+
+    const now = Date.now();
+    if (isStandardPublic && cachedPublicNotices && now < cacheExpiry) {
+      const lim = options.limit || 20;
+      return cachedPublicNotices.slice(0, lim);
+    }
+
+    if (isEmergencyOnly && cachedEmergencyNotices && now < cacheExpiry) {
+      const lim = options.limit || 3;
+      return cachedEmergencyNotices.slice(0, lim);
+    }
+
+    await ensurePostgresTables();
+    const pool = getPool();
 
     const conditions: string[] = [
       "status = 'Published'",
@@ -502,6 +542,16 @@ export const noticeDb = {
     params.push(limit, offset);
 
     const res = await pool.query(sql, params);
-    return res.rows.map(mapNoticeRow);
+    const mapped = res.rows.map(mapNoticeRow);
+
+    if (isStandardPublic) {
+      cachedPublicNotices = mapped;
+      cacheExpiry = now + 30000;
+    } else if (isEmergencyOnly) {
+      cachedEmergencyNotices = mapped;
+      cacheExpiry = now + 30000;
+    }
+
+    return mapped;
   },
 };

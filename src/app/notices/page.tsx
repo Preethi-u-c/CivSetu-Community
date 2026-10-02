@@ -28,6 +28,7 @@ import {
 import { wardsData } from "@/data/wards";
 import { NoticeRecord } from "@/lib/db/notices";
 import { useAuth } from "@/context/AuthContext";
+import { VoiceInputButton } from "@/components/Voice/VoiceInputButton";
 
 const CATEGORY_TABS = [
   { id: "ALL", label: "All Updates", icon: Bell },
@@ -47,7 +48,7 @@ function NoticesContent() {
   const urlCategory = searchParams?.get("category") || "ALL";
   const urlOnlyWard = searchParams?.get("onlyWard") === "true";
 
-  const [notices, setNotices] = useState<NoticeRecord[]>([]);
+  const [allNotices, setAllNotices] = useState<NoticeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -69,36 +70,53 @@ function NoticesContent() {
   const fetchNotices = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (activeCategory !== "ALL") params.set("category", activeCategory);
-      if (selectedWard !== "ALL") {
-        params.set("ward", selectedWard);
-        if (onlyWard) params.set("onlyWard", "true");
-      }
-      if (urgentOnly) params.set("isEmergency", "true");
-      if (search.trim()) params.set("search", search.trim());
-      params.set("limit", "50");
-
-      const res = await fetch(`/api/notices?${params.toString()}`);
+      const res = await fetch("/api/notices?limit=100");
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
-        setNotices(json.data);
+        setAllNotices(json.data);
       }
     } catch (err) {
       console.error("Failed to load public notices:", err);
     } finally {
       setLoading(false);
     }
-  }, [activeCategory, selectedWard, onlyWard, urgentOnly, search]);
+  }, []);
 
   useEffect(() => {
     fetchNotices();
   }, [fetchNotices]);
 
+  // Instant zero-latency filter on tab click or keystroke
+  const filteredNotices = useMemo(() => {
+    return allNotices.filter((n) => {
+      if (activeCategory !== "ALL" && n.category !== activeCategory) return false;
+      if (urgentOnly && !n.isEmergency) return false;
+      if (selectedWard !== "ALL") {
+        const wStr = selectedWard.toLowerCase();
+        const tWards = (n.targetWards || "").toLowerCase();
+        const wardMatch =
+          tWards.includes(wStr) ||
+          tWards.includes("all wards") ||
+          tWards.includes("all citizens") ||
+          tWards.includes("entire municipality");
+        if (!wardMatch) return false;
+      }
+      if (search.trim()) {
+        const q = search.trim().toLowerCase();
+        const inTitle = n.title.toLowerCase().includes(q);
+        const inDesc = n.description.toLowerCase().includes(q);
+        const inDept = n.issuedByDepartment.toLowerCase().includes(q);
+        const inWard = (n.targetWards || "").toLowerCase().includes(q);
+        return inTitle || inDesc || inDept || inWard;
+      }
+      return true;
+    });
+  }, [allNotices, activeCategory, urgentOnly, selectedWard, search]);
+
   // Find active emergency notices for the top emergency banner
   const emergencyNotices = useMemo(() => {
-    return notices.filter((n) => n.isEmergency);
-  }, [notices]);
+    return allNotices.filter((n) => n.isEmergency);
+  }, [allNotices]);
 
   const copyShareLink = (id: string) => {
     const url = `${window.location.origin}/notices/${id}`;
@@ -288,15 +306,22 @@ function NoticesContent() {
       <div className="bg-white dark:bg-[#061817] p-4 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
           {/* Keyword Search */}
-          <div className="sm:col-span-5 relative">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
+          <div className="sm:col-span-5 relative flex items-center">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search announcements (e.g. water pipeline, power outage, tax)..."
-              className="w-full pl-9 pr-4 py-2.5 border rounded-xl text-xs sm:text-sm dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:border-teal-600"
+              className="w-full pl-9 pr-12 py-2.5 border rounded-xl text-xs sm:text-sm dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:border-teal-600"
             />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+              <VoiceInputButton
+                size="sm"
+                onTranscript={(text) => setSearch((prev) => (prev ? `${prev} ${text}` : text))}
+                ariaLabel="Search announcements using microphone voice input"
+              />
+            </div>
           </div>
 
           {/* Ward Targeting Selector */}
@@ -389,7 +414,7 @@ function NoticesContent() {
             <RefreshCw className="w-8 h-8 animate-spin mx-auto text-teal-600" />
             <p className="text-xs text-gray-500">Loading municipal gazette notifications...</p>
           </div>
-        ) : notices.length === 0 ? (
+        ) : filteredNotices.length === 0 ? (
           <div className="p-16 text-center bg-white dark:bg-[#061817] rounded-2xl border border-gray-200 dark:border-gray-800 space-y-3">
             <Bell className="w-10 h-10 text-gray-300 mx-auto" />
             <h3 className="font-bold text-base text-gray-800 dark:text-gray-200">
@@ -412,7 +437,7 @@ function NoticesContent() {
             </button>
           </div>
         ) : (
-          notices.map((n) => {
+          filteredNotices.map((n) => {
             const theme = getCategoryTheme(n.category);
             const CategoryIcon = theme.icon;
             const isCopied = copiedId === n.id;

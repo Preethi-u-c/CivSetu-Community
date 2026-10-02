@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authService } from "@/lib/services/authService";
 import { isPostgresConfigured } from "@/lib/db/postgres";
 import { complaintDb, ComplaintStatus } from "@/lib/db/complaints";
+import { notificationService } from "@/lib/services/notificationService";
 
 export const dynamic = "force-dynamic";
 
@@ -143,6 +144,13 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         citizen.fullName
       );
 
+      await notificationService.notifyStatusUpdated(
+        complaintId,
+        "Reopened",
+        reason.trim(),
+        citizen.id
+      );
+
       return NextResponse.json({
         success: true,
         message: "Complaint reopened successfully. Assigned authority has been notified.",
@@ -163,6 +171,14 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         complaintId,
         reason.trim(),
         citizen.fullName
+      );
+
+      await notificationService.notifyComplaintEscalated(
+        complaintId,
+        updated.authorityLevel,
+        updated.assignedAuthority,
+        reason.trim(),
+        citizen.id
       );
 
       return NextResponse.json({
@@ -192,6 +208,21 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         resolutionNotes: resolutionNotes || undefined,
         updatedBy: citizen.fullName,
       });
+
+      if (status === "Resolved") {
+        await notificationService.notifyComplaintResolved(
+          complaintId,
+          resolutionNotes || note || "Grievance resolved",
+          citizen.id
+        );
+      } else {
+        await notificationService.notifyStatusUpdated(
+          complaintId,
+          status,
+          note || undefined,
+          citizen.id
+        );
+      }
 
       return NextResponse.json({
         success: true,

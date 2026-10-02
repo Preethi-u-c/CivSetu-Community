@@ -74,6 +74,7 @@ export const HomeAnnouncementsSection: React.FC = () => {
 
         <Link
           href="/notices"
+          prefetch={true}
           className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-[#064E4A] dark:text-teal-400 hover:text-[#0B6B63] dark:hover:text-teal-300 transition group"
         >
           <span>View All Ward Announcements</span>
@@ -89,6 +90,7 @@ export const HomeAnnouncementsSection: React.FC = () => {
             <Link
               key={n.id}
               href={`/notices/${n.id}`}
+              prefetch={true}
               className={`p-4 rounded-xl border bg-white dark:bg-[#061817] shadow-sm hover:shadow-md transition-all flex flex-col justify-between group ${
                 n.isEmergency
                   ? "border-rose-300 dark:border-rose-900 bg-rose-50/20"

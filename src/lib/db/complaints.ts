@@ -29,6 +29,7 @@ export interface ComplaintRecord {
   citizenId: string;
   citizenName?: string;
   citizenMobile?: string;
+  citizenEmail?: string;
   category: string;
   title: string;
   description: string;
@@ -159,6 +160,7 @@ function mapComplaintRow(row: Record<string, unknown>): ComplaintRecord {
     citizenId: row.citizen_id as string,
     citizenName: (row.citizen_name as string) || undefined,
     citizenMobile: (row.citizen_mobile as string) || undefined,
+    citizenEmail: (row.citizen_email as string) || undefined,
     category: row.category as string,
     title: row.title as string,
     description: row.description as string,
@@ -327,7 +329,7 @@ export const complaintDb = {
     const pool = getPool();
 
     const sql = `
-      SELECT c.*, cz.full_name AS citizen_name, cz.mobile_number AS citizen_mobile
+      SELECT c.*, cz.full_name AS citizen_name, cz.mobile_number AS citizen_mobile, cz.email AS citizen_email
       FROM complaints c
       LEFT JOIN citizens cz ON c.citizen_id = cz.id
       WHERE c.id = $1
@@ -416,7 +418,7 @@ export const complaintDb = {
     const offset = Math.max(Number(options.offset) || 0, 0);
 
     const dataSql = `
-      SELECT c.*, cz.full_name AS citizen_name, cz.mobile_number AS citizen_mobile
+      SELECT c.*, cz.full_name AS citizen_name, cz.mobile_number AS citizen_mobile, cz.email AS citizen_email
       FROM complaints c
       LEFT JOIN citizens cz ON c.citizen_id = cz.id
       ${whereClause}
@@ -735,7 +737,7 @@ export const complaintDb = {
     }
 
     const dataSql = `
-      SELECT c.*, cz.full_name AS citizen_name, cz.mobile_number AS citizen_mobile
+      SELECT c.*, cz.full_name AS citizen_name, cz.mobile_number AS citizen_mobile, cz.email AS citizen_email
       FROM complaints c
       LEFT JOIN citizens cz ON c.citizen_id = cz.id
       ${whereClause}

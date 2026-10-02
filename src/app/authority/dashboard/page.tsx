@@ -128,6 +128,16 @@ export default function AuthorityDashboardPage() {
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [unreadOnlyFilter, setUnreadOnlyFilter] = useState(false);
 
+  // 9. Real-time Live SSE Sync State
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const [liveAlert, setLiveAlert] = useState<{
+    id: string;
+    type: "complaint_created" | "complaint_updated" | "complaint_resolved" | "notice_published";
+    title: string;
+    message: string;
+    complaintId?: string;
+  } | null>(null);
+
   // =========================================================================
   // API LOADERS
   // =========================================================================
@@ -318,8 +328,203 @@ export default function AuthorityDashboardPage() {
   };
 
   // =========================================================================
-  // COMPLAINT ACTIONS & INSPECTION
+  // REAL-TIME SERVER-SENT EVENTS (SSE) LISTENER
+  // Dynamically receives new complaints, status updates, and gazette notices
+  // without requiring manual page reload or polling.
   // =========================================================================
+  useEffect(() => {
+    if (!officer) return;
+
+    let eventSource: EventSource | null = null;
+    let retryTimer: NodeJS.Timeout | null = null;
+
+    function connectSSE() {
+      try {
+        eventSource = new EventSource("/api/realtime/complaints");
+
+        eventSource.onopen = () => {
+          setRealtimeConnected(true);
+        };
+
+        // 1. Live New Complaint Received
+        eventSource.addEventListener("complaint_created", (event: MessageEvent) => {
+          try {
+            const newComplaint = JSON.parse(event.data);
+            if (newComplaint && newComplaint.id) {
+              setComplaints((prev) => {
+                if (prev.some((c) => c.id === newComplaint.id)) return prev;
+                return [newComplaint, ...prev];
+              });
+              setStats((prev) => ({
+                ...prev,
+                total: prev.total + 1,
+                submitted: prev.submitted + 1,
+              }));
+              setLiveAlert({
+                id: String(Date.now()),
+                type: "complaint_created",
+                title: "New Grievance Registered",
+                message: `#${newComplaint.id} • ${newComplaint.category} (${newComplaint.ward})`,
+                complaintId: newComplaint.id,
+              });
+              loadUnreadCount();
+            }
+          } catch (e) {
+            console.error("Error processing real-time complaint_created:", e);
+          }
+        });
+
+        // 2. Live Complaint Status / Assignment / Escalation Update
+        eventSource.addEventListener("complaint_updated", (event: MessageEvent) => {
+          try {
+            const updateData = JSON.parse(event.data);
+            if (updateData && updateData.complaintId) {
+              setComplaints((prev) =>
+                prev.map((c) => {
+                  if (c.id === updateData.complaintId) {
+                    return {
+                      ...c,
+                      status: updateData.status || c.status,
+                      assignedAuthority: updateData.assignedAuthority || c.assignedAuthority,
+                      authorityLevel: updateData.authorityLevel || c.authorityLevel,
+                      updatedAt: updateData.timestamp || new Date().toISOString(),
+                    };
+                  }
+                  return c;
+                })
+              );
+
+              setSelectedComplaint((curr) => {
+                if (curr && curr.id === updateData.complaintId) {
+                  return {
+                    ...curr,
+                    status: updateData.status || curr.status,
+                    assignedAuthority: updateData.assignedAuthority || curr.assignedAuthority,
+                    authorityLevel: updateData.authorityLevel || curr.authorityLevel,
+                    updatedAt: updateData.timestamp || new Date().toISOString(),
+                  };
+                }
+                return curr;
+              });
+
+              setLiveAlert({
+                id: String(Date.now()),
+                type: "complaint_updated",
+                title: `Complaint Updated: ${updateData.status || "Progressed"}`,
+                message: `#${updateData.complaintId} • ${updateData.note || "Ticket state refreshed"}`,
+                complaintId: updateData.complaintId,
+              });
+              loadUnreadCount();
+            }
+          } catch (e) {
+            console.error("Error processing real-time complaint_updated:", e);
+          }
+        });
+
+        // 3. Live Complaint Resolved
+        eventSource.addEventListener("complaint_resolved", (event: MessageEvent) => {
+          try {
+            const resolveData = JSON.parse(event.data);
+            if (resolveData && resolveData.complaintId) {
+              setComplaints((prev) =>
+                prev.map((c) => {
+                  if (c.id === resolveData.complaintId) {
+                    return {
+                      ...c,
+                      status: "Resolved",
+                      resolutionNotes: resolveData.resolutionNotes || c.resolutionNotes,
+                      resolvedAt: resolveData.resolvedAt || new Date().toISOString(),
+                    };
+                  }
+                  return c;
+                })
+              );
+
+              setSelectedComplaint((curr) => {
+                if (curr && curr.id === resolveData.complaintId) {
+                  return {
+                    ...curr,
+                    status: "Resolved",
+                    resolutionNotes: resolveData.resolutionNotes || curr.resolutionNotes,
+                    resolvedAt: resolveData.resolvedAt || new Date().toISOString(),
+                  };
+                }
+                return curr;
+              });
+
+              setLiveAlert({
+                id: String(Date.now()),
+                type: "complaint_resolved",
+                title: "Grievance Redressed",
+                message: `#${resolveData.complaintId} marked as Resolved`,
+                complaintId: resolveData.complaintId,
+              });
+              loadUnreadCount();
+            }
+          } catch (e) {
+            console.error("Error processing real-time complaint_resolved:", e);
+          }
+        });
+
+        // 4. Live Notice / Emergency Published
+        eventSource.addEventListener("notice_published", (event: MessageEvent) => {
+          try {
+            const noticeData = JSON.parse(event.data);
+            if (noticeData) {
+              setLiveAlert({
+                id: String(Date.now()),
+                type: "notice_published",
+                title: noticeData.isEmergency ? "🚨 Emergency Broadcast" : "Municipal Notice Published",
+                message: noticeData.title,
+              });
+              loadNotices();
+              loadUnreadCount();
+            }
+          } catch (e) {
+            console.error("Error processing real-time notice_published:", e);
+          }
+        });
+
+        eventSource.onerror = () => {
+          setRealtimeConnected(false);
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          if (!retryTimer) {
+            retryTimer = setTimeout(() => {
+              retryTimer = null;
+              connectSSE();
+            }, 5000);
+          }
+        };
+      } catch (err) {
+        console.error("SSE connection error:", err);
+        setRealtimeConnected(false);
+      }
+    }
+
+    connectSSE();
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+    };
+  }, [officer, loadUnreadCount, loadNotices]);
+
+  // Auto-dismiss live alerts after 7 seconds
+  useEffect(() => {
+    if (liveAlert) {
+      const timer = setTimeout(() => {
+        setLiveAlert(null);
+      }, 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [liveAlert]);
 
   const handleOpenDetail = async (complaint: ComplaintRecord) => {
     setSelectedComplaint(complaint);
@@ -655,6 +860,21 @@ export default function AuthorityDashboardPage() {
 
           {/* Right: Officer Profile Badge & Actions */}
           <div className="flex items-center gap-3">
+            {/* Live SSE Real-Time Status Indicator */}
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition ${
+                realtimeConnected
+                  ? "bg-emerald-950/80 border border-emerald-500/60 text-emerald-300"
+                  : "bg-amber-950/80 border border-amber-500/60 text-amber-300"
+              }`}
+              title={realtimeConnected ? "Real-time updates connected (SSE active)" : "Reconnecting to live event stream..."}
+            >
+              <span className={`w-2 h-2 rounded-full ${realtimeConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+              <span className="hidden md:inline">
+                {realtimeConnected ? "Live Updates Active" : "Connecting..."}
+              </span>
+            </div>
+
             <div className="hidden sm:flex flex-col text-right">
               <span className="text-xs font-bold text-white leading-tight">{officer?.fullName}</span>
               <span className="text-[11px] text-amber-300 leading-tight">{officer?.designation}</span>
@@ -681,6 +901,57 @@ export default function AuthorityDashboardPage() {
           </div>
         </div>
       </header>
+
+      {/* Floating Real-Time Alert Notification */}
+      {liveAlert && (
+        <div className="fixed top-16 right-4 z-50 max-w-md w-full bg-white dark:bg-gray-900 border-2 border-emerald-500 rounded-xl shadow-2xl p-4 animate-in slide-in-from-top-4 duration-300">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <span className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400">
+                <Bell className="w-5 h-5 animate-bounce" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                    Real-Time Notification
+                  </span>
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                </div>
+                <h4 className="text-sm font-bold text-gray-900 dark:text-white mt-0.5">
+                  {liveAlert.title}
+                </h4>
+                <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">
+                  {liveAlert.message}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLiveAlert(null)}
+              className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {liveAlert.complaintId && (
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const found = complaints.find((c) => c.id === liveAlert.complaintId);
+                  if (found) {
+                    handleOpenDetail(found);
+                  }
+                  setLiveAlert(null);
+                }}
+                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition cursor-pointer"
+              >
+                Inspect Complaint &rarr;
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 2. BODY LAYOUT: SIDEBAR + MAIN CONTENT */}
       <div className="flex-1 max-w-[1600px] w-full mx-auto flex">
@@ -786,7 +1057,7 @@ export default function AuthorityDashboardPage() {
         </aside>
 
         {/* MAIN DASHBOARD CONTENT */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto">
+        <main className="flex-1 min-w-0 w-full p-3 sm:p-6 lg:p-8 space-y-6 overflow-y-auto">
           {/* =========================================================================
               MODULE 1, 2, 3, 4, 5: COMPLAINTS / QUEUE / ASSIGNED / ESCALATED / SLA / RESOLVED
               ========================================================================= */}

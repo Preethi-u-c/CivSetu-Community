@@ -165,11 +165,20 @@ export interface SystemSettingRecord {
 }
 
 // =============================================================================
-// Connection Pool Singleton
+// Connection Pool Singleton & Schema Mutex (globalThis for Next.js reload persistence)
 // =============================================================================
 
-let poolInstance: Pool | null = null;
-let tablesInitialized = false;
+interface GlobalPg {
+  pgPool?: Pool;
+  pgTablesInitialized?: boolean;
+  pgInitPromise?: Promise<void> | null;
+  cachedWards?: WardRecord[];
+  cachedCategories?: ComplaintCategoryRecord[];
+  cachedNoticeCategories?: NoticeCategoryRecord[];
+  cachedEscalations?: EscalationSettingRecord[];
+}
+
+const globalForPg = globalThis as unknown as GlobalPg;
 
 export function isPostgresConfigured(): boolean {
   return !!process.env.DATABASE_URL && process.env.DATABASE_URL.trim().length > 0;
@@ -182,28 +191,49 @@ export function getPool(): Pool {
     );
   }
 
-  if (!poolInstance) {
-    const isProduction = process.env.NODE_ENV === "production";
-    poolInstance = new Pool({
+  if (!globalForPg.pgPool) {
+    globalForPg.pgPool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: isProduction ? { rejectUnauthorized: false } : undefined,
-      max: 10,
-      idleTimeoutMillis: 30000,
+      ssl: { rejectUnauthorized: false },
+      max: 20,
+      idleTimeoutMillis: 60000,
       connectionTimeoutMillis: 5000,
     });
   }
 
-  return poolInstance;
+  return globalForPg.pgPool;
 }
 
 /**
  * Ensures required tables and indexes exist in PostgreSQL.
+ * Uses global promise memoization and fast-path table existence check
+ * to eliminate the 5-6 second multi-query overhead on repeated requests.
  */
 export async function ensurePostgresTables(): Promise<void> {
-  if (tablesInitialized) return;
-  const pool = getPool();
+  if (globalForPg.pgTablesInitialized) return;
+  if (globalForPg.pgInitPromise) {
+    return globalForPg.pgInitPromise;
+  }
 
-  const ddl = `
+  globalForPg.pgInitPromise = (async () => {
+    const pool = getPool();
+
+    // Fast-path: Check if tables already exist in PostgreSQL.
+    // If they do, skip the heavy multi-second DDL and 12 sequential seed loops!
+    try {
+      const checkRes = await pool.query(
+        "SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('citizens', 'complaints', 'citizen_services', 'government_schemes');"
+      );
+      const count = parseInt(checkRes.rows[0]?.count || "0", 10);
+      if (count >= 3) {
+        globalForPg.pgTablesInitialized = true;
+        return;
+      }
+    } catch {
+      // Proceed to run DDL if schema check fails
+    }
+
+    const ddl = `
     CREATE TABLE IF NOT EXISTS citizens (
         id VARCHAR(64) PRIMARY KEY,
         full_name VARCHAR(255) NOT NULL,
@@ -523,6 +553,25 @@ export async function ensurePostgresTables(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_services_status ON citizen_services(status);
     CREATE INDEX IF NOT EXISTS idx_services_category ON citizen_services(category);
     CREATE INDEX IF NOT EXISTS idx_services_department ON citizen_services(department);
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+        id SERIAL PRIMARY KEY,
+        actor_id VARCHAR(64) NOT NULL,
+        actor_name VARCHAR(255) NOT NULL,
+        actor_role VARCHAR(64) NOT NULL,
+        action VARCHAR(100) NOT NULL,
+        target_type VARCHAR(64) NOT NULL,
+        target_id VARCHAR(64),
+        old_state JSONB,
+        new_state JSONB,
+        details TEXT,
+        ip_address VARCHAR(64),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs(target_type, target_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC);
   `;
 
   await pool.query(ddl);
@@ -537,8 +586,14 @@ export async function ensurePostgresTables(): Promise<void> {
   await seedDefaultComplaintCategories(pool);
   await seedDefaultNoticeCategories(pool);
   await seedDefaultEscalationSettings(pool);
-  await seedDefaultSystemSettings(pool);
-  tablesInitialized = true;
+    await seedDefaultSystemSettings(pool);
+    globalForPg.pgTablesInitialized = true;
+  })().catch((err) => {
+    globalForPg.pgInitPromise = null;
+    throw err;
+  });
+
+  return globalForPg.pgInitPromise;
 }
 
 async function seedDefaultAuthorities(pool: Pool) {
@@ -1894,6 +1949,20 @@ export const citizenDb = {
     await ensurePostgresTables();
     const res = await pool.query(sql, [passwordHash, citizenId]);
     return (res.rowCount ?? 0) > 0;
+  },
+
+  async listCitizenEmails(ward?: string): Promise<{ email: string; fullName: string }[]> {
+    await ensurePostgresTables();
+    const pool = getPool();
+    let sql = "SELECT email, full_name FROM citizens WHERE email IS NOT NULL AND email != ''";
+    const params: unknown[] = [];
+    if (ward && ward !== "ALL" && !ward.toLowerCase().includes("all")) {
+      sql += " AND ward_number = $1";
+      params.push(ward);
+    }
+    sql += " LIMIT 500;";
+    const res = await pool.query(sql, params);
+    return res.rows.map((r: any) => ({ email: r.email, fullName: r.full_name }));
   },
 };
 

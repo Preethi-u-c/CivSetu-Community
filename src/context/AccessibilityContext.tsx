@@ -159,3 +159,8 @@ export function useAccessibility() {
 
   return context;
 }
+
+export function useTranslation() {
+  const { t, language, setLanguage } = useAccessibility();
+  return { t, language, setLanguage };
+}

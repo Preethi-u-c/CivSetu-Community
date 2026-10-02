@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorityService } from "@/lib/services/authorityService";
+import { adminService } from "@/lib/services/adminService";
 import { notificationDb } from "@/lib/db/authority";
 
 export const dynamic = "force-dynamic";
@@ -10,10 +11,14 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   try {
-    const authority = await authorityService.getSessionAuthority();
-    if (!authority) {
+    const [authority, admin] = await Promise.all([
+      authorityService.getSessionAuthority(),
+      adminService.getSessionAdmin(),
+    ]);
+
+    if (!authority && !admin) {
       return NextResponse.json(
-        { success: false, error: "Authority authentication required." },
+        { success: false, error: "Authority or Administrator authorization required." },
         { status: 401 }
       );
     }
@@ -48,10 +53,14 @@ export async function GET(req: NextRequest) {
  */
 export async function PATCH(req: NextRequest) {
   try {
-    const authority = await authorityService.getSessionAuthority();
-    if (!authority) {
+    const [authority, admin] = await Promise.all([
+      authorityService.getSessionAuthority(),
+      adminService.getSessionAdmin(),
+    ]);
+
+    if (!authority && !admin) {
       return NextResponse.json(
-        { success: false, error: "Authority authentication required." },
+        { success: false, error: "Authority or Administrator authorization required." },
         { status: 401 }
       );
     }

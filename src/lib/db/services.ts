@@ -62,11 +62,20 @@ export function generateServiceId(category?: string): string {
   return `SRV-LMC-${prefix}-${hex}`;
 }
 
+let cachedPublicServices: CitizenService[] | null = null;
+let cacheExpiry = 0;
+
+export function invalidateServicesCache(): void {
+  cachedPublicServices = null;
+  cacheExpiry = 0;
+}
+
 export const servicesDb = {
   /**
    * Creates a new citizen service record
    */
   async create(params: CreateServiceParams): Promise<CitizenService> {
+    invalidateServicesCache();
     await ensurePostgresTables();
     const pool = getPool();
 
@@ -180,13 +189,30 @@ export const servicesDb = {
   },
 
   /**
-   * Public list of active citizen services
+   * Public list of active citizen services with 60-second in-memory caching
    */
   async listPublic(options: ServiceFilterOptions = {}): Promise<CitizenService[]> {
+    const isUnfiltered =
+      (!options.category || options.category === "ALL") &&
+      (!options.department || options.department === "ALL") &&
+      (!options.search || !options.search.trim()) &&
+      (!options.offset || options.offset === 0);
+
+    const now = Date.now();
+    if (isUnfiltered && cachedPublicServices && now < cacheExpiry) {
+      return cachedPublicServices;
+    }
+
     const res = await this.list({
       ...options,
       status: "Active",
     });
+
+    if (isUnfiltered) {
+      cachedPublicServices = res.services;
+      cacheExpiry = now + 60000;
+    }
+
     return res.services;
   },
 
@@ -205,6 +231,7 @@ export const servicesDb = {
    * Updates an existing citizen service
    */
   async update(id: string, updates: UpdateServiceParams): Promise<CitizenService> {
+    invalidateServicesCache();
     await ensurePostgresTables();
     const pool = getPool();
 
@@ -288,6 +315,7 @@ export const servicesDb = {
    * Deletes a citizen service
    */
   async delete(id: string): Promise<boolean> {
+    invalidateServicesCache();
     await ensurePostgresTables();
     const pool = getPool();
     const res = await pool.query("DELETE FROM citizen_services WHERE id = $1;", [id.trim()]);

@@ -8,21 +8,20 @@ import { siteConfig } from "@/data/siteConfig";
 import { useAccessibility } from "@/context/AccessibilityContext";
 
 export const MainHeader: React.FC = () => {
-  const { language } = useAccessibility();
-  const isKn = language === "kn";
+  const { t } = useAccessibility();
 
   return (
     <div className="bg-white dark:bg-[#071d1b] border-b border-gray-200 dark:border-gray-800 transition-colors">
       <div className="max-w-[1380px] mx-auto px-4 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
         {/* Left Side: Karnataka Emblem + CivSetu Brand & Municipality Title */}
-        <Link href="/" className="flex items-center gap-3.5 group text-left">
-          <StateEmblem className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0" />
+        <Link href="/" prefetch={true} className="flex items-center gap-2.5 sm:gap-3.5 group text-left">
+          <StateEmblem className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 flex-shrink-0" />
           <div className="flex flex-col">
-            <span className="text-3xl sm:text-4xl font-extrabold tracking-tight text-[#064E4A] dark:text-[#2DD4BF] leading-none">
-              {siteConfig.name}
+            <span className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-[#064E4A] dark:text-[#2DD4BF] leading-none">
+              {t.header.portalName || siteConfig.name}
             </span>
-            <span className="text-sm sm:text-base font-semibold text-[#B98519] dark:text-[#FBBF24] mt-1 tracking-wide">
-              {isKn ? siteConfig.municipalityKn : siteConfig.municipality}
+            <span className="text-xs sm:text-sm md:text-base font-semibold text-[#B98519] dark:text-[#FBBF24] mt-1 tracking-wide">
+              {t.header.subTitle || siteConfig.municipality}
             </span>
           </div>
         </Link>
@@ -32,10 +31,10 @@ export const MainHeader: React.FC = () => {
           <div className="flex items-center gap-2.5">
             <div className="flex flex-col text-center sm:text-right">
               <span className="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-100">
-                {isKn ? siteConfig.stateGovKn : siteConfig.stateGov}
+                {t.header.stateGov || siteConfig.stateGov}
               </span>
               <span className="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400">
-                {isKn ? siteConfig.departmentKn : siteConfig.department}
+                {t.header.dept || siteConfig.department}
               </span>
             </div>
             <StateEmblem className="w-9 h-9 flex-shrink-0 hidden sm:block" />

@@ -44,6 +44,7 @@ export const EmergencyBanner: React.FC = () => {
         <div className="flex items-center gap-2 self-end sm:self-auto flex-shrink-0">
           <Link
             href={`/notices/${latestAlert.id}`}
+            prefetch={true}
             className="inline-flex items-center gap-1 font-extrabold bg-white text-rose-700 hover:bg-rose-50 px-3 py-1 rounded text-xs transition shadow-sm"
           >
             <span>Read Official Directive</span>
