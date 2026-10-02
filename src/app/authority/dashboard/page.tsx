@@ -113,7 +113,9 @@ export default function AuthorityDashboardPage() {
   const [noticeTitle, setNoticeTitle] = useState("");
   const [noticeDescription, setNoticeDescription] = useState("");
   const [noticeCategory, setNoticeCategory] = useState("Public Notice");
-  const [noticeScope, setNoticeScope] = useState<"Entire Municipality" | "Specific Wards">("Entire Municipality");
+  const [noticeScope, setNoticeScope] = useState<
+    "All citizens" | "Specific ward(s)" | "Entire municipality" | "Emergency / city-wide" | "Entire Municipality" | "Specific Wards"
+  >("All citizens");
   const [noticeSelectedWards, setNoticeSelectedWards] = useState<string[]>([]);
   const [noticePriority, setNoticePriority] = useState<"Normal" | "High" | "Urgent">("Normal");
   const [noticeIsEmergency, setNoticeIsEmergency] = useState(false);
@@ -413,7 +415,14 @@ export default function AuthorityDashboardPage() {
           description: noticeDescription.trim(),
           category: noticeCategory,
           targetScope: noticeScope,
-          targetWards: noticeScope === "Specific Wards" ? noticeSelectedWards.join(", ") : "All Wards (01 - 23)",
+          targetWards:
+            noticeScope === "Specific ward(s)" || noticeScope === "Specific Wards"
+              ? noticeSelectedWards.join(", ")
+              : noticeScope === "All citizens"
+              ? "All Citizens (01 - 23)"
+              : noticeScope === "Emergency / city-wide"
+              ? "All Wards (Emergency Broadcast)"
+              : "Entire Municipality (City-Wide)",
           priority: noticePriority,
           isEmergency: noticeIsEmergency,
           status: noticeStatus,
@@ -433,7 +442,7 @@ export default function AuthorityDashboardPage() {
       setNoticeTitle("");
       setNoticeDescription("");
       setNoticeCategory("Public Notice");
-      setNoticeScope("Entire Municipality");
+      setNoticeScope("All citizens");
       setNoticeSelectedWards([]);
       setNoticePriority("Normal");
       setNoticeIsEmergency(false);
@@ -1536,31 +1545,53 @@ export default function AuthorityDashboardPage() {
 
                       <div>
                         <label className="block font-bold text-gray-700 dark:text-gray-300 mb-1">
-                          Target Jurisdiction Scope
+                          Target Jurisdiction Scope *
                         </label>
-                        <div className="flex gap-4">
-                          <label className="flex items-center gap-1.5 cursor-pointer">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                          <label className={`flex items-center gap-1.5 p-2 rounded-lg border cursor-pointer transition ${noticeScope === "All citizens" ? "border-teal-600 bg-teal-50 dark:bg-teal-950/40 font-bold" : "border-gray-200 dark:border-gray-700"}`}>
                             <input
                               type="radio"
                               name="noticeScope"
-                              checked={noticeScope === "Entire Municipality"}
-                              onChange={() => setNoticeScope("Entire Municipality")}
+                              checked={noticeScope === "All citizens"}
+                              onChange={() => setNoticeScope("All citizens")}
                             />
-                            <span>Entire Municipality (All 23 Wards)</span>
+                            <span>All citizens</span>
                           </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
+                          <label className={`flex items-center gap-1.5 p-2 rounded-lg border cursor-pointer transition ${noticeScope === "Specific ward(s)" || noticeScope === "Specific Wards" ? "border-teal-600 bg-teal-50 dark:bg-teal-950/40 font-bold" : "border-gray-200 dark:border-gray-700"}`}>
                             <input
                               type="radio"
                               name="noticeScope"
-                              checked={noticeScope === "Specific Wards"}
-                              onChange={() => setNoticeScope("Specific Wards")}
+                              checked={noticeScope === "Specific ward(s)" || noticeScope === "Specific Wards"}
+                              onChange={() => setNoticeScope("Specific ward(s)")}
                             />
-                            <span>Specific Ward(s)</span>
+                            <span>Specific ward(s)</span>
+                          </label>
+                          <label className={`flex items-center gap-1.5 p-2 rounded-lg border cursor-pointer transition ${noticeScope === "Entire municipality" || noticeScope === "Entire Municipality" ? "border-teal-600 bg-teal-50 dark:bg-teal-950/40 font-bold" : "border-gray-200 dark:border-gray-700"}`}>
+                            <input
+                              type="radio"
+                              name="noticeScope"
+                              checked={noticeScope === "Entire municipality" || noticeScope === "Entire Municipality"}
+                              onChange={() => setNoticeScope("Entire municipality")}
+                            />
+                            <span>Entire municipality</span>
+                          </label>
+                          <label className={`flex items-center gap-1.5 p-2 rounded-lg border cursor-pointer transition ${noticeScope === "Emergency / city-wide" ? "border-rose-600 bg-rose-50 dark:bg-rose-950/40 font-bold text-rose-700 dark:text-rose-300" : "border-gray-200 dark:border-gray-700"}`}>
+                            <input
+                              type="radio"
+                              name="noticeScope"
+                              checked={noticeScope === "Emergency / city-wide"}
+                              onChange={() => {
+                                setNoticeScope("Emergency / city-wide");
+                                setNoticeIsEmergency(true);
+                                setNoticePriority("Urgent");
+                              }}
+                            />
+                            <span>Emergency / city-wide</span>
                           </label>
                         </div>
                       </div>
 
-                      {noticeScope === "Specific Wards" && (
+                      {(noticeScope === "Specific ward(s)" || noticeScope === "Specific Wards") && (
                         <div className="p-3 border rounded-xl bg-gray-50 dark:bg-gray-800/60 space-y-2">
                           <span className="font-bold text-gray-700 dark:text-gray-300 block">
                             Select Target Ward(s):

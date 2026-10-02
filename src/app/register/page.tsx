@@ -23,9 +23,9 @@ import {
 export default function RegisterPage() {
   // Form fields
   const [fullName, setFullName] = useState("");
-  const [mobileNumber, setMobileNumber] = useState("");
-  const [otp, setOtp] = useState("");
   const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [mobileNumber, setMobileNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [selectedWard, setSelectedWard] = useState("");
@@ -33,7 +33,7 @@ export default function RegisterPage() {
 
   // UI state
   const [otpSent, setOtpSent] = useState(false);
-  const [isMobileVerified, setIsMobileVerified] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,21 +52,21 @@ export default function RegisterPage() {
   const isValidEmail = (em: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em.trim());
 
-  // Handler: Send OTP via Backend
+  // Handler: Send OTP via Gmail Backend
   const handleSendOtp = async () => {
     if (isSendingOtp) return;
     setOtpError(null);
-    const trimmedMobile = mobileNumber.trim();
+    const trimmedEmail = email.trim().toLowerCase();
 
-    if (!trimmedMobile) {
-      setErrors((prev) => ({ ...prev, mobile: "Mobile number is required." }));
+    if (!trimmedEmail) {
+      setErrors((prev) => ({ ...prev, email: "Email address is required to receive verification code." }));
       return;
     }
 
-    if (!isValidIndianMobile(trimmedMobile)) {
+    if (!isValidEmail(trimmedEmail)) {
       setErrors((prev) => ({
         ...prev,
-        mobile: "Please enter a valid 10-digit Indian mobile number (e.g. 9876543210).",
+        email: "Please enter a valid email address (e.g. name@example.com).",
       }));
       return;
     }
@@ -76,19 +76,19 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobileNumber: trimmedMobile, purpose: "registration" }),
+        body: JSON.stringify({ email: trimmedEmail, purpose: "registration" }),
       });
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        setErrors((prev) => ({ ...prev, mobile: data.error || "Failed to dispatch OTP." }));
+        setErrors((prev) => ({ ...prev, email: data.error || "Failed to dispatch verification code." }));
         return;
       }
 
-      // Clear mobile error & activate OTP step
+      // Clear email error & activate OTP step
       setErrors((prev) => {
         const next = { ...prev };
-        delete next.mobile;
+        delete next.email;
         delete next.server;
         return next;
       });
@@ -96,7 +96,7 @@ export default function RegisterPage() {
     } catch {
       setErrors((prev) => ({
         ...prev,
-        mobile: "Network error occurred while connecting to the OTP server. Please try again.",
+        email: "Network error occurred while connecting to the verification server. Please try again.",
       }));
     } finally {
       setIsSendingOtp(false);
@@ -110,12 +110,12 @@ export default function RegisterPage() {
     const trimmedOtp = otp.trim();
 
     if (!trimmedOtp) {
-      setOtpError("Please enter the OTP received on your mobile number.");
+      setOtpError("Please enter the verification code sent to your email.");
       return;
     }
 
     if (trimmedOtp.length < 4 || trimmedOtp.length > 6 || !/^\d+$/.test(trimmedOtp)) {
-      setOtpError("Please enter a valid 4 to 6 digit numerical OTP.");
+      setOtpError("Please enter a valid 4 to 6 digit numerical code.");
       return;
     }
 
@@ -125,7 +125,7 @@ export default function RegisterPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          identifier: mobileNumber.trim(),
+          email: email.trim().toLowerCase(),
           otp: trimmedOtp,
           purpose: "registration",
         }),
@@ -133,12 +133,12 @@ export default function RegisterPage() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        setOtpError(data.error || "OTP verification failed. Please try again.");
+        setOtpError(data.error || "Verification code is invalid or has expired.");
         return;
       }
 
       // Mark as verified
-      setIsMobileVerified(true);
+      setIsEmailVerified(true);
       setOtpError(null);
       setErrors((prev) => {
         const next = { ...prev };
@@ -146,7 +146,7 @@ export default function RegisterPage() {
         return next;
       });
     } catch {
-      setOtpError("Network error occurred while verifying OTP. Please try again.");
+      setOtpError("Network error occurred while verifying code. Please try again.");
     } finally {
       setIsVerifyingOtp(false);
     }
@@ -166,23 +166,23 @@ export default function RegisterPage() {
       newErrors.fullName = "Full name must be at least 3 characters.";
     }
 
-    // 2. Mobile validation
-    if (!mobileNumber.trim()) {
-      newErrors.mobile = "Mobile number is required.";
-    } else if (!isValidIndianMobile(mobileNumber.trim())) {
-      newErrors.mobile = "Please enter a valid 10-digit Indian mobile number.";
-    }
-
-    // 3. OTP verification check
-    if (!isMobileVerified) {
-      newErrors.otp = "Mobile number verification via OTP is required before registration.";
-    }
-
-    // 4. Email validation
+    // 2. Email validation
     if (!email.trim()) {
       newErrors.email = "Email address is required.";
     } else if (!isValidEmail(email)) {
       newErrors.email = "Please enter a valid email address.";
+    }
+
+    // 3. Email verification check
+    if (!isEmailVerified) {
+      newErrors.otp = "Email verification via OTP is required before registration.";
+    }
+
+    // 4. Mobile validation
+    if (!mobileNumber.trim()) {
+      newErrors.mobile = "Mobile number is required.";
+    } else if (!isValidIndianMobile(mobileNumber.trim())) {
+      newErrors.mobile = "Please enter a valid 10-digit Indian mobile number.";
     }
 
     // 5. Password validation
@@ -214,7 +214,6 @@ export default function RegisterPage() {
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length > 0) {
-      // Scroll to first error
       const firstErrorKey = Object.keys(newErrors)[0];
       const el = document.getElementById(firstErrorKey);
       if (el) {
@@ -223,7 +222,6 @@ export default function RegisterPage() {
       return;
     }
 
-    // Real backend registration request
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/auth/register", {
@@ -231,13 +229,13 @@ export default function RegisterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fullName: fullName.trim(),
+          email: email.trim().toLowerCase(),
           mobileNumber: mobileNumber.trim(),
-          email: email.trim(),
           password,
           confirmPassword,
           wardNumber: selectedWard,
           residentialAddress: address.trim(),
-          otp: otp.trim() || "123456",
+          otp: otp.trim(),
         }),
       });
       const data = await res.json();
@@ -284,11 +282,11 @@ export default function RegisterPage() {
 
             <div className="space-y-2">
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
-                Registration Profile Validated
+                Registration Successful
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-300 max-w-md mx-auto">
                 Thank you, <span className="font-semibold text-[#064E4A] dark:text-teal-300">{fullName}</span>.
-                Your citizen account details for Ward {selectedWard} have passed client validation.
+                Your citizen account has been verified and registered for {selectedWard}.
               </p>
             </div>
 
@@ -298,16 +296,16 @@ export default function RegisterPage() {
                 <span className="font-semibold">{fullName}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500 dark:text-gray-400">Verified Mobile:</span>
+                <span className="text-gray-500 dark:text-gray-400">Verified Email:</span>
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400">{email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500 dark:text-gray-400">Contact Mobile:</span>
                 <span className="font-semibold">+91 {mobileNumber}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500 dark:text-gray-400">Email:</span>
-                <span className="font-semibold">{email}</span>
-              </div>
-              <div className="flex justify-between">
                 <span className="text-gray-500 dark:text-gray-400">Jurisdiction Ward:</span>
-                <span className="font-semibold">Ward No. {selectedWard}</span>
+                <span className="font-semibold">{selectedWard}</span>
               </div>
             </div>
 
@@ -410,86 +408,84 @@ export default function RegisterPage() {
               )}
             </div>
 
-            {/* 2. Mobile Number & Send OTP */}
+            {/* 2. Email Address with Gmail OTP Verification */}
             <div>
-              <label
-                htmlFor="mobileNumber"
-                className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5"
-              >
-                Mobile Number <span className="text-red-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  htmlFor="email"
+                  className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider"
+                >
+                  Email Address (Gmail Verification) <span className="text-red-500">*</span>
+                </label>
+                <span className="text-[11px] text-teal-700 dark:text-teal-400 font-medium">
+                  Verification OTP will be sent to your Gmail
+                </span>
+              </div>
               <div className="flex flex-col sm:flex-row gap-2">
-                <div className="relative flex-1 flex">
-                  <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm font-semibold">
-                    +91
-                  </span>
-                  <div className="relative flex-1">
-                    <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
-                    <input
-                      id="mobileNumber"
-                      type="tel"
-                      maxLength={10}
-                      disabled={isMobileVerified}
-                      value={mobileNumber}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, "");
-                        setMobileNumber(val);
-                        if (isMobileVerified) {
-                          setIsMobileVerified(false);
-                          setOtpSent(false);
-                          setOtp("");
-                        }
-                        if (errors.mobile) {
-                          setErrors((prev) => {
-                            const n = { ...prev };
-                            delete n.mobile;
-                            return n;
-                          });
-                        }
-                      }}
-                      placeholder="10-digit mobile number"
-                      className={`w-full pl-9 pr-3 py-2.5 border rounded-r-lg dark:bg-gray-800/80 focus:outline-none text-sm transition ${
-                        isMobileVerified
-                          ? "bg-gray-50 dark:bg-gray-800 text-gray-500 cursor-not-allowed border-gray-300 dark:border-gray-700"
-                          : errors.mobile
-                          ? "border-red-500 focus:border-red-500 ring-1 ring-red-500"
-                          : "border-gray-300 dark:border-gray-700 focus:border-[#064E4A] dark:focus:border-teal-400"
-                      }`}
-                      aria-invalid={!!errors.mobile}
-                      aria-describedby={errors.mobile ? "mobile-error" : undefined}
-                    />
-                  </div>
+                <div className="relative flex-1">
+                  <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                  <input
+                    id="email"
+                    type="email"
+                    disabled={isEmailVerified}
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (isEmailVerified) {
+                        setIsEmailVerified(false);
+                        setOtpSent(false);
+                        setOtp("");
+                      }
+                      if (errors.email) {
+                        setErrors((prev) => {
+                          const n = { ...prev };
+                          delete n.email;
+                          return n;
+                        });
+                      }
+                    }}
+                    placeholder="your.email@gmail.com"
+                    className={`w-full pl-9 pr-3 py-2.5 border rounded-lg dark:bg-gray-800/80 focus:outline-none text-sm transition ${
+                      isEmailVerified
+                        ? "bg-gray-50 dark:bg-gray-800 text-gray-500 cursor-not-allowed border-gray-300 dark:border-gray-700"
+                        : errors.email
+                        ? "border-red-500 focus:border-red-500 ring-1 ring-red-500"
+                        : "border-gray-300 dark:border-gray-700 focus:border-[#064E4A] dark:focus:border-teal-400"
+                    }`}
+                    aria-invalid={!!errors.email}
+                    aria-describedby={errors.email ? "email-error" : undefined}
+                  />
                 </div>
 
-                {!isMobileVerified && (
+                {!isEmailVerified && (
                   <button
                     type="button"
                     onClick={handleSendOtp}
                     disabled={isSendingOtp}
                     className="px-4 py-2.5 bg-[#064E4A] hover:bg-[#0B6B63] text-white text-xs sm:text-sm font-bold rounded-lg transition whitespace-nowrap shadow-sm disabled:opacity-50"
                   >
-                    {isSendingOtp ? "Sending OTP..." : otpSent ? "Resend OTP" : "Send OTP"}
+                    {isSendingOtp ? "Sending code..." : otpSent ? "Resend Code" : "Send Verification Code"}
                   </button>
                 )}
               </div>
 
-              {errors.mobile && (
-                <p id="mobile-error" className="text-xs text-red-600 dark:text-red-400 mt-1">
-                  {errors.mobile}
+              {errors.email && (
+                <p id="email-error" className="text-xs text-red-600 dark:text-red-400 mt-1">
+                  {errors.email}
                 </p>
               )}
 
               {/* Verified Badge */}
-              {isMobileVerified && (
+              {isEmailVerified && (
                 <div className="mt-2 flex items-center gap-2">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-full">
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Mobile number verified</span>
+                    <span>Email verified successfully</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
-                      setIsMobileVerified(false);
+                      setIsEmailVerified(false);
                       setOtpSent(false);
                       setOtp("");
                     }}
@@ -501,18 +497,18 @@ export default function RegisterPage() {
               )}
             </div>
 
-            {/* 3. OTP Section (Active when OTP is sent & not yet verified) */}
-            {otpSent && !isMobileVerified && (
+            {/* 3. OTP Input Section (Active when verification code sent & not yet verified) */}
+            {otpSent && !isEmailVerified && (
               <div className="p-4 bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-900 rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
                   <label
                     htmlFor="otp"
                     className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider"
                   >
-                    Enter OTP <span className="text-red-500">*</span>
+                    Enter 6-Digit Verification Code <span className="text-red-500">*</span>
                   </label>
-                  <span className="text-[11px] text-teal-700 dark:text-teal-400 font-medium">
-                    OTP sent to +91 {mobileNumber}
+                  <span className="text-[11px] text-teal-700 dark:text-teal-400 font-medium truncate max-w-[220px]">
+                    Code sent to {email}
                   </span>
                 </div>
 
@@ -526,7 +522,7 @@ export default function RegisterPage() {
                       setOtp(e.target.value.replace(/\D/g, ""));
                       setOtpError(null);
                     }}
-                    placeholder="Enter 6-digit OTP"
+                    placeholder="6-digit code"
                     className="flex-1 px-3 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg dark:bg-gray-800 focus:outline-none focus:border-[#064E4A] dark:focus:border-teal-400 text-sm font-mono tracking-widest text-center sm:text-left"
                     aria-describedby={otpError ? "otp-error" : undefined}
                   />
@@ -536,7 +532,7 @@ export default function RegisterPage() {
                     disabled={isVerifyingOtp}
                     className="px-5 py-2.5 bg-[#B98519] hover:bg-[#9E7013] text-white text-xs sm:text-sm font-bold rounded-lg transition shadow-sm disabled:opacity-50"
                   >
-                    {isVerifyingOtp ? "Verifying..." : "Verify OTP"}
+                    {isVerifyingOtp ? "Verifying..." : "Verify Code"}
                   </button>
                 </div>
 
@@ -547,54 +543,61 @@ export default function RegisterPage() {
                 )}
 
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                  Tip: For testing this frontend preview, enter any 6 digits (e.g. 123456) and click Verify OTP.
+                  Please check your Gmail inbox (or spam folder) for the verification code from <strong>CivSetu Portal</strong>.
                 </p>
               </div>
             )}
 
-            {errors.otp && !isMobileVerified && (
+            {errors.otp && !isEmailVerified && (
               <p className="text-xs text-red-600 dark:text-red-400 -mt-2">
                 {errors.otp}
               </p>
             )}
 
-            {/* 4. Email Address */}
+            {/* 4. Mobile Number */}
             <div>
               <label
-                htmlFor="email"
+                htmlFor="mobileNumber"
                 className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5"
               >
-                Email Address <span className="text-red-500">*</span>
+                Contact Mobile Number <span className="text-red-500">*</span>
               </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (errors.email) {
-                      setErrors((prev) => {
-                        const n = { ...prev };
-                        delete n.email;
-                        return n;
-                      });
-                    }
-                  }}
-                  placeholder="citizen@example.com"
-                  className={`w-full pl-9 pr-3 py-2.5 border rounded-lg dark:bg-gray-800/80 focus:outline-none text-sm transition ${
-                    errors.email
-                      ? "border-red-500 focus:border-red-500 ring-1 ring-red-500"
-                      : "border-gray-300 dark:border-gray-700 focus:border-[#064E4A] dark:focus:border-teal-400"
-                  }`}
-                  aria-invalid={!!errors.email}
-                  aria-describedby={errors.email ? "email-error" : undefined}
-                />
+              <div className="relative flex">
+                <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-sm font-semibold">
+                  +91
+                </span>
+                <div className="relative flex-1">
+                  <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                  <input
+                    id="mobileNumber"
+                    type="tel"
+                    maxLength={10}
+                    value={mobileNumber}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "");
+                      setMobileNumber(val);
+                      if (errors.mobile) {
+                        setErrors((prev) => {
+                          const n = { ...prev };
+                          delete n.mobile;
+                          return n;
+                        });
+                      }
+                    }}
+                    placeholder="10-digit mobile number for official communication"
+                    className={`w-full pl-9 pr-3 py-2.5 border rounded-r-lg dark:bg-gray-800/80 focus:outline-none text-sm transition ${
+                      errors.mobile
+                        ? "border-red-500 focus:border-red-500 ring-1 ring-red-500"
+                        : "border-gray-300 dark:border-gray-700 focus:border-[#064E4A] dark:focus:border-teal-400"
+                    }`}
+                    aria-invalid={!!errors.mobile}
+                    aria-describedby={errors.mobile ? "mobile-error" : undefined}
+                  />
+                </div>
               </div>
-              {errors.email && (
-                <p id="email-error" className="text-xs text-red-600 dark:text-red-400 mt-1">
-                  {errors.email}
+              {errors.mobile && (
+                <p id="mobile-error" className="text-xs text-red-600 dark:text-red-400 mt-1">
+                  {errors.mobile}
                 </p>
               )}
             </div>

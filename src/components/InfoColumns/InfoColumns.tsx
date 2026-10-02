@@ -103,27 +103,60 @@ export const InfoColumns: React.FC = () => {
 
         {/* Column 2: What's New */}
         <div className="flex flex-col px-0 md:px-3 pt-4 md:pt-0">
-          <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 text-center mb-3">
-            {t.info.whatsNew}
-          </h3>
-          <ul className="space-y-2.5 text-xs">
-            {noticesList.map((notice) => (
-              <li key={notice.id} className="flex items-start gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-600 mt-1 flex-shrink-0" />
-                <div className="flex flex-col">
-                  <Link
-                    href={`/notices/${notice.slug}`}
-                    className="font-semibold text-teal-800 dark:text-teal-300 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
-                  >
-                    {isKn ? notice.titleKn : notice.title}
-                  </Link>
-                  <span className="text-[11px] text-gray-500 dark:text-gray-400">
-                    {isKn ? notice.relativeTimeKn : notice.relativeTime}
-                  </span>
-                </div>
-              </li>
-            ))}
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+              {t.info.whatsNew}
+            </h3>
+            <Link
+              href="/notices"
+              className="text-[11px] font-bold text-teal-700 dark:text-teal-400 hover:underline"
+            >
+              View All →
+            </Link>
+          </div>
+          <ul className="space-y-2.5 text-xs flex-1">
+            {noticesList.slice(0, 4).map((notice: any) => {
+              const href = `/notices/${notice.id || notice.slug}`;
+              return (
+                <li key={notice.id} className="flex items-start gap-2">
+                  <span
+                    className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                      notice.isEmergency ? "bg-rose-600 animate-ping" : "bg-emerald-600"
+                    }`}
+                  />
+                  <div className="flex flex-col">
+                    <Link
+                      href={href}
+                      className="font-semibold text-teal-800 dark:text-teal-300 hover:text-amber-600 dark:hover:text-amber-400 transition-colors line-clamp-1"
+                    >
+                      {notice.title}
+                    </Link>
+                    <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                      <span className="font-medium text-[#064E4A] dark:text-teal-400">
+                        {notice.category}
+                      </span>
+                      <span>•</span>
+                      <span>{notice.targetScope || notice.date || "City-Wide"}</span>
+                      {notice.isEmergency && (
+                        <span className="text-[9px] font-bold bg-rose-100 text-rose-700 px-1 rounded">
+                          ALERT
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
+          <div className="pt-2 border-t border-gray-100 dark:border-gray-800 mt-2">
+            <Link
+              href="/notices"
+              className="text-xs font-bold text-[#064E4A] dark:text-teal-400 hover:underline flex items-center gap-1"
+            >
+              <span>Explore Public Gazette & Announcements</span>
+              <span>→</span>
+            </Link>
+          </div>
         </div>
 
         {/* Column 3: Contact Us */}

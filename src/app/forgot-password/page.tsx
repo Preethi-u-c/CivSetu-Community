@@ -22,6 +22,7 @@ export default function ForgotPasswordPage() {
 
   // Form states
   const [identifier, setIdentifier] = useState("");
+  const [targetEmail, setTargetEmail] = useState<string | null>(null);
   const [maskedTarget, setMaskedTarget] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -74,7 +75,10 @@ export default function ForgotPasswordPage() {
         return;
       }
 
-      setMaskedTarget(data.mobileMasked || null);
+      if (data.targetIdentifier) {
+        setTargetEmail(data.targetIdentifier);
+      }
+      setMaskedTarget(data.emailMasked || data.mobileMasked || null);
       setStep(2);
     } catch {
       setIdentifierError("Network error occurred while connecting to the recovery service.");
@@ -106,7 +110,7 @@ export default function ForgotPasswordPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          identifier: identifier.trim(),
+          identifier: targetEmail || identifier.trim(),
           otp: trimmedOtp,
           purpose: "password_reset",
         }),
@@ -156,7 +160,7 @@ export default function ForgotPasswordPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          identifier: identifier.trim(),
+          identifier: targetEmail || identifier.trim(),
           otp: otp.trim(),
           newPassword,
           confirmNewPassword,

@@ -51,16 +51,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Server-side verification check
-    let verified = await otpService.hasVerifiedOtp(citizen.mobileNumber, "password_reset");
+    // Server-side verification check (check email first, then mobile)
+    let verified = await otpService.hasVerifiedOtp(citizen.email, "password_reset");
+    if (!verified) {
+      verified = await otpService.hasVerifiedOtp(citizen.mobileNumber, "password_reset");
+    }
+
     if (!verified && otp) {
-      const verifyRes = await otpService.verifyOtp(
-        citizen.mobileNumber,
+      let verifyRes = await otpService.verifyOtp(
+        citizen.email,
         otp.toString(),
         "password_reset"
       );
       if (verifyRes.success) {
         verified = true;
+      } else {
+        verifyRes = await otpService.verifyOtp(
+          citizen.mobileNumber,
+          otp.toString(),
+          "password_reset"
+        );
+        if (verifyRes.success) {
+          verified = true;
+        }
       }
     }
 
@@ -84,6 +97,7 @@ export async function POST(req: NextRequest) {
     await authService.revokeAllSessions(citizen.id);
 
     // Consume the verified OTP
+    await otpService.consumeVerifiedOtp(citizen.email, "password_reset");
     await otpService.consumeVerifiedOtp(citizen.mobileNumber, "password_reset");
 
     return NextResponse.json({

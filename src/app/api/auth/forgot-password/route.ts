@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     if (!identifier) {
       return NextResponse.json(
-        { success: false, error: "Please enter your registered mobile number or email address." },
+        { success: false, error: "Please enter your registered email address or mobile number." },
         { status: 400 }
       );
     }
@@ -34,14 +34,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "No registered citizen account found with this mobile number or email.",
+          error: "No registered citizen account found with this email or mobile number.",
         },
         { status: 404 }
       );
     }
 
-    // Send reset OTP to the citizen's verified mobile number
-    const result = await otpService.sendOtp(citizen.mobileNumber, "password_reset");
+    // Send reset OTP directly to the citizen's registered email
+    const result = await otpService.sendOtp(citizen.email, "password_reset");
     if (!result.success) {
       return NextResponse.json(
         { success: false, error: result.error || "Failed to dispatch password reset OTP." },
@@ -49,10 +49,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const emailParts = citizen.email.split("@");
+    const maskedEmail = `${emailParts[0].slice(0, 2)}***@${emailParts[1]}`;
+
     return NextResponse.json({
       success: true,
-      message: "Password reset OTP dispatched to your registered mobile number.",
-      mobileMasked: `+91 ******${citizen.mobileNumber.slice(-4)}`,
+      message: `Password reset verification code sent to your registered email (${maskedEmail}).`,
+      emailMasked: maskedEmail,
+      targetIdentifier: citizen.email,
       expiresInSeconds: result.expiresInSeconds,
     });
   } catch (error) {

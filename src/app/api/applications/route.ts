@@ -9,8 +9,13 @@ export async function GET(req: NextRequest) {
     const serviceCode = searchParams.get("serviceCode") || undefined;
     const status = searchParams.get("status") || undefined;
     const search = searchParams.get("search") || undefined;
+    const mobile = searchParams.get("mobile") || undefined;
 
-    const list = db.applications.list({ serviceCode, status, search });
+    let list = db.applications.list({ serviceCode, status, search });
+    if (mobile) {
+      const cleanMobile = mobile.replace(/\D/g, "");
+      list = list.filter((a) => a.mobileNumber.replace(/\D/g, "").includes(cleanMobile));
+    }
     return NextResponse.json({ success: true, count: list.length, data: list });
   } catch (error) {
     console.error("Error retrieving applications:", error);

@@ -23,6 +23,10 @@ import {
   ChevronRight,
   ShieldAlert,
   Loader2,
+  FileCheck,
+  Newspaper,
+  CalendarDays,
+  Briefcase,
 } from "lucide-react";
 
 interface AdminUser {
@@ -138,6 +142,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       label: "Grievance Operations",
       items: [
         { name: "Complaints", href: "/admin/complaints", icon: FileText },
+        { name: "Applications", href: "/admin/applications", icon: FileCheck },
         { name: "Complaint Categories", href: "/admin/complaint-categories", icon: Tags },
         { name: "Escalation Settings", href: "/admin/escalation-settings", icon: GitFork },
       ],
@@ -147,6 +152,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       items: [
         { name: "Notices", href: "/admin/notices", icon: Bell },
         { name: "Notice Categories", href: "/admin/notice-categories", icon: Bookmark },
+        { name: "Local News", href: "/admin/news", icon: Newspaper },
+        { name: "Events & Festivals", href: "/admin/events", icon: CalendarDays },
+        { name: "Government Schemes", href: "/admin/schemes", icon: Landmark },
+        { name: "Services Directory", href: "/admin/services", icon: Briefcase },
       ],
     },
     {
@@ -158,10 +167,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   return (
-    <div className="min-h-screen bg-[#F5F5F4] dark:bg-[#041211] text-gray-900 dark:text-gray-100 flex flex-col">
+    <div className="min-h-screen bg-[#F5F5F4] dark:bg-[#041211] text-gray-900 dark:text-gray-100 flex flex-col m-0 p-0">
       {/* Top Banner */}
-      <header className="bg-[#042F2E] text-white text-xs py-2 px-4 border-b border-teal-900/60 sticky top-0 z-40">
-        <div className="max-w-[1700px] mx-auto flex items-center justify-between gap-4">
+      <header className="bg-[#042F2E] text-white text-xs py-2 px-4 border-b border-teal-900/60 sticky top-0 z-40 m-0">
+        <div className="w-full flex items-center justify-between gap-4 m-0">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -179,6 +188,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
 
           <div className="flex items-center gap-4 text-xs font-semibold">
+            <Link
+              href="/admin/applications"
+              className="flex items-center gap-1.5 text-teal-200 hover:text-amber-300 transition"
+            >
+              <FileCheck className="w-3.5 h-3.5 text-amber-400" />
+              <span>Applications</span>
+            </Link>
             <Link
               href="/authority/dashboard"
               className="hidden md:flex items-center gap-1 text-teal-300 hover:text-white transition"
@@ -198,7 +214,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </header>
 
-      <div className="flex-1 flex max-w-[1700px] w-full mx-auto">
+      <div className="flex-1 flex w-full m-0">
         {/* Desktop Sidebar */}
         <aside className="hidden lg:flex w-64 flex-col bg-[#064E4A] text-white border-r border-teal-900/40 p-4 shrink-0 shadow-lg justify-between">
           <div>

@@ -17,7 +17,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 
-export default function AdminLoginPage() {
+function AdminLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectParam = searchParams.get("redirect") || "/admin/dashboard";
@@ -221,3 +221,18 @@ export default function AdminLoginPage() {
     </div>
   );
 }
+
+export default function AdminLoginPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="min-h-screen bg-[#032220] flex items-center justify-center text-teal-200 text-sm">
+          Loading administrator workspace...
+        </div>
+      }
+    >
+      <AdminLoginContent />
+    </React.Suspense>
+  );
+}
+

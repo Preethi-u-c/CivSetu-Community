@@ -33,6 +33,8 @@ export async function GET(req: NextRequest) {
     const category = searchParams.get("category") || undefined;
     const priority = searchParams.get("priority") || undefined;
     const targetScope = searchParams.get("targetScope") || undefined;
+    const targetWard = searchParams.get("targetWard") || undefined;
+    const onlyWard = searchParams.get("onlyWard") === "true";
     const isEmergency = searchParams.has("isEmergency")
       ? searchParams.get("isEmergency") === "true"
       : undefined;
@@ -46,6 +48,8 @@ export async function GET(req: NextRequest) {
         category,
         priority,
         targetScope,
+        targetWard,
+        onlyWard,
         isEmergency,
         search,
         limit,
@@ -126,12 +130,40 @@ export async function POST(req: NextRequest) {
     const cleanCategory = (category && typeof category === "string" ? category.trim() : "") || "Public Notice";
 
     // 4. Validation: Target Scope
-    const validScopes = ["Entire Municipality", "Specific Wards"];
-    const cleanScope = validScopes.includes(targetScope) ? targetScope : "Entire Municipality";
+    const validScopes = [
+       "All citizens",
+       "Specific ward(s)",
+       "Entire municipality",
+       "Emergency / city-wide",
+       "Entire Municipality",
+       "Specific Wards",
+    ];
+    let cleanScope = validScopes.includes(targetScope) ? targetScope : "Entire municipality";
+    let formattedWards: string | null = null;
+    let cleanPriority = priority;
+    let cleanEmergency = Boolean(isEmergency);
+
+    if (cleanScope === "Specific ward(s)" || cleanScope === "Specific Wards") {
+      cleanScope = "Specific ward(s)";
+      if (Array.isArray(targetWards)) {
+        formattedWards = targetWards.join(", ");
+      } else if (typeof targetWards === "string" && targetWards.trim()) {
+        formattedWards = targetWards.trim();
+      }
+    } else if (cleanScope === "All citizens") {
+      formattedWards = "All Citizens (01 - 23)";
+    } else if (cleanScope === "Entire municipality" || cleanScope === "Entire Municipality") {
+      cleanScope = "Entire municipality";
+      formattedWards = "Entire Municipality (City-Wide)";
+    } else if (cleanScope === "Emergency / city-wide") {
+      formattedWards = "All Wards (Emergency Broadcast)";
+      cleanEmergency = true;
+      cleanPriority = "Urgent";
+    }
 
     // 5. Validation: Priority
     const validPriorities = ["Normal", "High", "Urgent"];
-    const cleanPriority = validPriorities.includes(priority) ? priority : "Normal";
+    const finalPriority = validPriorities.includes(cleanPriority) ? cleanPriority : "Normal";
 
     // 6. Validation: Status
     const validStatuses = ["Draft", "Published", "Archived"];
@@ -142,10 +174,10 @@ export async function POST(req: NextRequest) {
       title: title.trim(),
       description: description.trim(),
       category: cleanCategory,
-      targetScope: cleanScope as "Entire Municipality" | "Specific Wards",
-      targetWards: targetWards && typeof targetWards === "string" ? targetWards.trim() : null,
-      priority: cleanPriority as "Normal" | "High" | "Urgent",
-      isEmergency: Boolean(isEmergency),
+      targetScope: cleanScope as any,
+      targetWards: formattedWards,
+      priority: finalPriority as "Normal" | "High" | "Urgent",
+      isEmergency: cleanEmergency,
       status: cleanStatus as "Draft" | "Published" | "Archived",
       publishDate: publishDate || undefined,
       expiryDate: expiryDate || null,

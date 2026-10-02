@@ -18,6 +18,10 @@ import {
   ArrowRight,
   LogIn,
   ShieldAlert,
+  ArrowDown,
+  AlertTriangle,
+  GitFork,
+  Check,
 } from "lucide-react";
 
 interface TimelineEvent {
@@ -52,6 +56,145 @@ interface ResultData {
   descriptionOrAddress: string;
   timeline: TimelineEvent[];
 }
+
+const SLA_STAGES = [
+  { key: "SUBMITTED", label: "Submitted" },
+  { key: "UNDER_REVIEW", label: "Under Review" },
+  { key: "IN_PROGRESS", label: "In Progress" },
+  { key: "ESCALATED", label: "Escalated" },
+  { key: "RESOLVED", label: "Resolved" },
+];
+
+function getStageIndex(statusStr: string): number {
+  const s = (statusStr || "").toUpperCase().replace(/\s+/g, "_");
+  if (s === "RESOLVED" || s === "CLOSED" || s === "COMPLETED") return 4;
+  if (s === "ESCALATED") return 3;
+  if (s === "IN_PROGRESS" || s === "ASSIGNED" || s === "NEAR_DEADLINE") return 2;
+  if (s === "UNDER_REVIEW" || s === "UNDER_VERIFICATION" || s === "INSPECTION_SCHEDULED") return 1;
+  return 0; // SUBMITTED
+}
+
+function getSlaInfo(createdAtStr: string, deadlineStr?: string, statusStr?: string) {
+  const s = (statusStr || "").toUpperCase().replace(/\s+/g, "_");
+  const isResolved = ["RESOLVED", "CLOSED", "COMPLETED"].includes(s);
+
+  if (!deadlineStr) {
+    return {
+      hasDeadline: false,
+      isResolved,
+      isOverdue: false,
+      text: isResolved ? "Resolved" : "SLA standard municipal turnaround applies",
+      expectedDate: "Within standard municipal business turnaround",
+      remainingText: isResolved ? "Completed" : "Active SLA",
+      percent: isResolved ? 100 : 50,
+      badgeColor: "bg-teal-50 text-[#064E4A] dark:bg-teal-950 dark:text-teal-300 border-teal-200",
+    };
+  }
+
+  const deadline = new Date(deadlineStr).getTime();
+  const created = new Date(createdAtStr).getTime();
+  const now = Date.now();
+  const totalDuration = Math.max(deadline - created, 1);
+  const elapsed = Math.max(now - created, 0);
+
+  const formattedDeadline = new Date(deadlineStr).toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
+  if (isResolved) {
+    return {
+      hasDeadline: true,
+      isResolved: true,
+      isOverdue: false,
+      text: "Resolution completed successfully within municipal SLA target",
+      expectedDate: formattedDeadline,
+      remainingText: "Resolved",
+      percent: 100,
+      badgeColor: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300",
+    };
+  }
+
+  const diffMs = deadline - now;
+  const isOverdue = diffMs < 0;
+  const absDiff = Math.abs(diffMs);
+  const days = Math.floor(absDiff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((absDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((absDiff % (1000 * 60 * 60)) / (1000 * 60));
+
+  let timeString = "";
+  if (days > 0) timeString = `${days} days ${hours} hrs`;
+  else if (hours > 0) timeString = `${hours} hrs ${minutes} mins`;
+  else timeString = `${minutes} mins`;
+
+  const percent = Math.min(Math.max(Math.round((elapsed / totalDuration) * 100), 5), 100);
+
+  if (isOverdue) {
+    return {
+      hasDeadline: true,
+      isResolved: false,
+      isOverdue: true,
+      text: `SLA Target Breached: Overdue by ${timeString}`,
+      expectedDate: formattedDeadline,
+      remainingText: `Overdue by ${timeString}`,
+      percent: 100,
+      badgeColor: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300 animate-pulse",
+    };
+  }
+
+  return {
+    hasDeadline: true,
+    isResolved: false,
+    isOverdue: false,
+    text: `${timeString} remaining to resolve`,
+    expectedDate: formattedDeadline,
+    remainingText: `${timeString} remaining`,
+    percent,
+    badgeColor:
+      percent > 75
+        ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300"
+        : "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border-teal-300",
+  };
+}
+
+const ESCALATION_TIERS = [
+  {
+    tier: 1,
+    key: "Local Authority",
+    name: "Local Authority",
+    authority: "Lakshmeshwar Town Municipal Council",
+    officer: "Chief Officer / Junior Engineer Wing",
+    sla: "Standard 48 Hours SLA",
+    description: "Initial grievance scrutiny, field inspection, and primary engineering action.",
+  },
+  {
+    tier: 2,
+    key: "Block level",
+    name: "Lakshmeshwar Taluk Panchayat",
+    authority: "Taluk Panchayat Executive Office",
+    officer: "Taluk Executive Officer (EO)",
+    sla: "+72 Hours Escalation Tier",
+    description: "Inter-departmental coordination, taluk-level engineering oversight.",
+  },
+  {
+    tier: 3,
+    key: "District Panchayat",
+    name: "Gadag Zilla Panchayat",
+    authority: "District Panchayat Secretariat",
+    officer: "Chief Executive Officer (CEO, ZP)",
+    sla: "+96 Hours Appellate Tier",
+    description: "Zilla Panchayat administrative review and contractor accountability directive.",
+  },
+  {
+    tier: 4,
+    key: "District Administration",
+    name: "District Administration",
+    authority: "Office of the Deputy Commissioner & District Magistrate, Gadag",
+    officer: "Deputy Commissioner (DC, Gadag)",
+    sla: "Final Statutory Executive Authority",
+    description: "Highest district executive intervention, disciplinary inquiry, and emergency allocation.",
+  },
+];
 
 function TrackContent() {
   const searchParams = useSearchParams();
@@ -513,6 +656,111 @@ function TrackContent() {
                 </div>
               </div>
 
+              {/* 5-Stage Visual SLA Progress Stepper & Countdown */}
+              {(() => {
+                const currentStageIndex = getStageIndex(result.status);
+                const sla = getSlaInfo(result.createdAt, result.deadline, result.status);
+
+                return (
+                  <div className="pt-2 pb-1">
+                    <div className="p-4 sm:p-5 rounded-2xl bg-teal-50/60 dark:bg-teal-950/20 border border-teal-100 dark:border-teal-900/60 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-[#064E4A] dark:text-teal-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>Resolution Progress & SLA Lifecycle</span>
+                        </span>
+                        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                          Step {Math.min(currentStageIndex + 1, 5)} of 5 • {SLA_STAGES[currentStageIndex]?.label || "Submitted"}
+                        </span>
+                      </div>
+
+                      {/* Stepper bar */}
+                      <div className="grid grid-cols-5 gap-1.5 sm:gap-2 relative">
+                        {SLA_STAGES.map((stage, idx) => {
+                          const isCompleted = idx < currentStageIndex || (idx === 4 && currentStageIndex === 4);
+                          const isCurrent = idx === currentStageIndex && currentStageIndex < 4;
+                          return (
+                            <div key={stage.key} className="flex flex-col items-center text-center space-y-1.5">
+                              <div
+                                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                                  isCompleted
+                                    ? "bg-emerald-600 text-white shadow-sm"
+                                    : isCurrent
+                                    ? "bg-[#064E4A] dark:bg-teal-500 text-white ring-4 ring-teal-200 dark:ring-teal-900 animate-pulse"
+                                    : "bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-500"
+                                }`}
+                              >
+                                {isCompleted ? (
+                                  <Check className="w-4 h-4" />
+                                ) : (
+                                  <span>{idx + 1}</span>
+                                )}
+                              </div>
+                              <span
+                                className={`text-[10px] sm:text-xs font-bold leading-tight ${
+                                  isCurrent
+                                    ? "text-[#064E4A] dark:text-teal-300"
+                                    : isCompleted
+                                    ? "text-emerald-700 dark:text-emerald-400 font-semibold"
+                                    : "text-gray-400 dark:text-gray-500"
+                                }`}
+                              >
+                                {stage.label}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Dedicated SLA Countdown & Target Resolution Box */}
+                      {sla && (
+                        <div className="pt-3 border-t border-teal-100 dark:border-teal-900/60 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                              Expected Resolution
+                            </span>
+                            <p className="font-semibold text-gray-900 dark:text-gray-100">
+                              {sla.expectedDate}
+                            </p>
+                          </div>
+
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                              SLA Deadline
+                            </span>
+                            <p className="font-mono font-bold text-gray-900 dark:text-gray-100">
+                              {result.deadline
+                                ? new Date(result.deadline).toLocaleDateString("en-IN", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })
+                                : "Statutory 48h"}
+                            </p>
+                          </div>
+
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                              Days / Hours Remaining
+                            </span>
+                            <div>
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold border ${sla.badgeColor}`}>
+                                {sla.isOverdue && <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />}
+                                {!sla.isOverdue && !sla.isResolved && <Clock className="w-3.5 h-3.5 text-teal-700 dark:text-teal-300" />}
+                                {sla.isResolved && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
+                                <span>{sla.remainingText}</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Meta Grid: Category, Ward, Location, Submission Date, SLA Deadline, Authority */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 py-2 text-xs text-gray-600 dark:text-gray-300">
                 {/* Category */}
@@ -708,6 +956,116 @@ function TrackContent() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Visual Multi-Tier Escalation Hierarchy */}
+            {result.type === "complaint" && (
+              <div className="p-5 sm:p-6 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#071d1b] shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-950 flex items-center justify-center text-[#064E4A] dark:text-teal-300">
+                      <GitFork className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                        Statutory Civic Escalation Hierarchy
+                      </h3>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                        Automated multi-tier administrative governance under Karnataka Municipalities Act
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-right self-start sm:self-center">
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 text-[#064E4A] dark:text-teal-300">
+                      Active: {result.authorityLevel || "Local Authority"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Vertical flowchart with downward arrows */}
+                <div className="space-y-2 pt-1">
+                  {ESCALATION_TIERS.map((tier, idx) => {
+                    const currentLevel = (result.authorityLevel || "Local Authority").toLowerCase();
+                    const isCurrentTier =
+                      tier.key.toLowerCase() === currentLevel ||
+                      (tier.tier === 1 && (!result.authorityLevel || currentLevel.includes("local")));
+                    const isPastTier =
+                      (currentLevel.includes("block") && tier.tier < 2) ||
+                      (currentLevel.includes("district panchayat") && tier.tier < 3) ||
+                      (currentLevel.includes("district administration") && tier.tier < 4);
+
+                    return (
+                      <React.Fragment key={tier.tier}>
+                        <div
+                          className={`p-4 rounded-xl border transition-all ${
+                            isCurrentTier
+                              ? "bg-teal-50/80 dark:bg-teal-950/40 border-teal-400 dark:border-teal-600 shadow-sm ring-2 ring-teal-400/30"
+                              : isPastTier
+                              ? "bg-gray-50 dark:bg-gray-900/40 border-emerald-300 dark:border-emerald-800"
+                              : "bg-gray-50/50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800 opacity-70"
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-start gap-3">
+                              <div
+                                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 ${
+                                  isCurrentTier
+                                    ? "bg-[#064E4A] text-white animate-pulse"
+                                    : isPastTier
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-gray-300 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                }`}
+                              >
+                                {isPastTier ? <Check className="w-3.5 h-3.5" /> : tier.tier}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-bold text-xs sm:text-sm text-gray-900 dark:text-gray-100">
+                                    {tier.name}
+                                  </h4>
+                                  {isCurrentTier && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#064E4A] text-white animate-pulse">
+                                      Current Jurisdiction
+                                    </span>
+                                  )}
+                                  {isPastTier && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                                      Escalated Upward
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                                  {tier.authority} • <span className="font-medium">{tier.officer}</span>
+                                </p>
+                                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                                  {tier.description}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="text-left sm:text-right flex-shrink-0">
+                              <span className="text-[10px] font-mono font-bold px-2 py-1 rounded bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300">
+                                {tier.sla}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {idx < ESCALATION_TIERS.length - 1 && (
+                          <div className="flex items-center justify-center py-0.5">
+                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400">
+                              <div className="w-0.5 h-3 bg-gray-300 dark:bg-gray-700" />
+                              <ArrowDown className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                              <div className="w-0.5 h-3 bg-gray-300 dark:bg-gray-700" />
+                            </div>
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
               </div>
             )}

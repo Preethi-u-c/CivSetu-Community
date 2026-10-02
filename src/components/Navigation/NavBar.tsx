@@ -3,13 +3,13 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Info, PhoneCall, User, UserPlus, LogOut, Menu, X } from "lucide-react";
+import { Home, Info, PhoneCall, User, UserPlus, LogOut, Menu, X, Bell, Newspaper, CalendarDays, Landmark, Briefcase } from "lucide-react";
 import { useAccessibility } from "@/context/AccessibilityContext";
 import { useAuth } from "@/context/AuthContext";
 
 export const NavBar: React.FC = () => {
   const pathname = usePathname();
-  const { t } = useAccessibility();
+  const { t, language } = useAccessibility();
   const { citizen: currentUser, logout: handleLogout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -19,6 +19,36 @@ export const NavBar: React.FC = () => {
       href: "/",
       icon: Home,
       isActive: pathname === "/",
+    },
+    {
+      name: language === "kn" ? "ಸೇವೆಗಳು" : "Services",
+      href: "/services",
+      icon: Briefcase,
+      isActive: pathname.startsWith("/services") || pathname.startsWith("/citizen-services"),
+    },
+    {
+      name: language === "kn" ? "ಅಧಿಸೂಚನೆಗಳು" : "Announcements",
+      href: "/notices",
+      icon: Bell,
+      isActive: pathname.startsWith("/notices"),
+    },
+    {
+      name: language === "kn" ? "ಸ್ಥಳೀಯ ಸುದ್ದಿಗಳು" : "Town News",
+      href: "/news",
+      icon: Newspaper,
+      isActive: pathname.startsWith("/news"),
+    },
+    {
+      name: language === "kn" ? "ಕಾರ್ಯಕ್ರಮಗಳು" : "Events",
+      href: "/events",
+      icon: CalendarDays,
+      isActive: pathname.startsWith("/events"),
+    },
+    {
+      name: language === "kn" ? "ಯೋಜನೆಗಳು" : "Schemes",
+      href: "/schemes",
+      icon: Landmark,
+      isActive: pathname.startsWith("/schemes"),
     },
     {
       name: t.nav.aboutUs,

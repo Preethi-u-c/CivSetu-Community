@@ -28,8 +28,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="scroll-smooth text-scale-normal">
-      <body className="min-h-screen flex flex-col bg-[#FBF9F4] dark:bg-[#081816] text-[#17201F] dark:text-[#E2E8F0] antialiased">
+    <html lang="en" className="scroll-smooth text-scale-normal m-0 p-0">
+      <body className="min-h-screen flex flex-col m-0 p-0 bg-[#FBF9F4] dark:bg-[#081816] text-[#17201F] dark:text-[#E2E8F0] antialiased">
         <AccessibilityProvider>
           <AuthProvider>
             {/* 1. Top Utility / Accessibility Bar */}

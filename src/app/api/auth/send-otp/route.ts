@@ -18,29 +18,85 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { mobileNumber, purpose } = body;
+    const { email, mobileNumber, identifier, purpose } = body;
 
-    if (!mobileNumber) {
+    const rawTarget = (email || identifier || mobileNumber || "").toString().trim();
+
+    if (!rawTarget) {
       return NextResponse.json(
-        { success: false, error: "Mobile number is required." },
+        { success: false, error: "Email address is required to receive verification OTP." },
         { status: 400 }
       );
     }
 
-    const cleanedMobile = mobileNumber.toString().replace(/\D/g, "");
+    const isEmail = rawTarget.includes("@");
+    const validPurpose = purpose === "password_reset" ? "password_reset" : "registration";
+
+    if (isEmail) {
+      const cleanEmail = rawTarget.toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        return NextResponse.json(
+          { success: false, error: "Please enter a valid email address." },
+          { status: 400 }
+        );
+      }
+
+      // Registration check
+      if (validPurpose === "registration") {
+        const existing = await citizenDb.findByEmail(cleanEmail);
+        if (existing) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "This email address is already registered. Please proceed to Login.",
+            },
+            { status: 409 }
+          );
+        }
+      }
+
+      // Password reset check
+      if (validPurpose === "password_reset") {
+        const existing = await citizenDb.findByEmail(cleanEmail);
+        if (!existing) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "No registered citizen account found with this email address.",
+            },
+            { status: 404 }
+          );
+        }
+      }
+
+      const result = await otpService.sendOtp(cleanEmail, validPurpose);
+      if (!result.success) {
+        return NextResponse.json(
+          { success: false, error: result.error || "Failed to send verification email." },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Verification code sent successfully to your email address.",
+        expiresInSeconds: result.expiresInSeconds,
+        channel: result.deliveryChannel,
+      });
+    }
+
+    // Fallback if a mobile number is provided
+    const cleanedMobile = rawTarget.replace(/\D/g, "");
     if (!/^[6-9]\d{9}$/.test(cleanedMobile)) {
       return NextResponse.json(
         {
           success: false,
-          error: "Please enter a valid 10-digit Indian mobile number (e.g. 9876543210).",
+          error: "Please enter a valid email address or 10-digit Indian mobile number.",
         },
         { status: 400 }
       );
     }
 
-    const validPurpose = purpose === "password_reset" ? "password_reset" : "registration";
-
-    // For registration: check duplicate mobile
     if (validPurpose === "registration") {
       const existing = await citizenDb.findByMobile(cleanedMobile);
       if (existing) {
@@ -54,11 +110,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // For password_reset: check if account exists
     if (validPurpose === "password_reset") {
       const existing = await citizenDb.findByMobile(cleanedMobile);
       if (!existing) {
-        // Prevent enumeration while gracefully rejecting invalid request
         return NextResponse.json(
           {
             success: false,
@@ -81,6 +135,7 @@ export async function POST(req: NextRequest) {
       success: true,
       message: "OTP sent successfully to your mobile number.",
       expiresInSeconds: result.expiresInSeconds,
+      channel: result.deliveryChannel,
     });
   } catch (error) {
     console.error("Error in /api/auth/send-otp:", error);

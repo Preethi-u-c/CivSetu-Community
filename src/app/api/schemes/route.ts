@@ -1,0 +1,48 @@
+import { NextRequest, NextResponse } from "next/server";
+import { isPostgresConfigured } from "@/lib/db/postgres";
+import { schemesDb } from "@/lib/db/schemes";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * GET /api/schemes
+ * Public endpoint: Returns active government schemes.
+ * Supports category, department, and search filters.
+ */
+export async function GET(req: NextRequest) {
+  try {
+    if (!isPostgresConfigured()) {
+      return NextResponse.json(
+        { success: false, error: "Database service is not configured." },
+        { status: 503 }
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
+    const category = searchParams.get("category") || undefined;
+    const department = searchParams.get("department") || undefined;
+    const search = searchParams.get("search") || undefined;
+    const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!, 10) : 50;
+    const offset = searchParams.get("offset") ? parseInt(searchParams.get("offset")!, 10) : 0;
+
+    const schemes = await schemesDb.listPublic({
+      category,
+      department,
+      search,
+      limit,
+      offset,
+    });
+
+    return NextResponse.json({
+      success: true,
+      count: schemes.length,
+      data: schemes,
+    });
+  } catch (error) {
+    console.error("Error in GET /api/schemes:", error);
+    return NextResponse.json(
+      { success: false, error: "An unexpected error occurred while fetching schemes." },
+      { status: 500 }
+    );
+  }
+}

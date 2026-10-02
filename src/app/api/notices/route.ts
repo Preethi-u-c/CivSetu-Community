@@ -19,9 +19,27 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
+    const category = searchParams.get("category") || undefined;
+    const ward = searchParams.get("ward") || undefined;
+    const onlyWard = searchParams.get("onlyWard") === "true";
+    const priority = searchParams.get("priority") || undefined;
+    const isEmergency = searchParams.has("isEmergency")
+      ? searchParams.get("isEmergency") === "true"
+      : undefined;
+    const search = searchParams.get("search") || undefined;
     const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!, 10) : 20;
+    const offset = searchParams.get("offset") ? parseInt(searchParams.get("offset")!, 10) : 0;
 
-    const notices = await noticeDb.listPublic(limit);
+    const notices = await noticeDb.listPublic({
+      category,
+      ward,
+      onlyWard,
+      priority,
+      isEmergency,
+      search,
+      limit,
+      offset,
+    });
 
     return NextResponse.json({
       success: true,

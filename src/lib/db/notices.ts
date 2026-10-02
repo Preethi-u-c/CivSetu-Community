@@ -1,13 +1,13 @@
-import { getPool, ensurePostgresTables, NoticeRecord } from "./postgres";
+import { getPool, ensurePostgresTables, NoticeRecord, NoticeTargetScope } from "./postgres";
 import crypto from "crypto";
 
-export type { NoticeRecord };
+export type { NoticeRecord, NoticeTargetScope };
 
 export interface CreateNoticeParams {
   title: string;
   description: string;
   category: string;
-  targetScope: "Entire Municipality" | "Specific Wards";
+  targetScope: NoticeTargetScope;
   targetWards?: string | null;
   priority: "Normal" | "High" | "Urgent";
   isEmergency?: boolean;
@@ -24,6 +24,19 @@ export interface NoticeFilterOptions {
   category?: string;
   priority?: string;
   targetScope?: string;
+  targetWard?: string;
+  onlyWard?: boolean;
+  isEmergency?: boolean;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface PublicNoticeFilterOptions {
+  category?: string;
+  priority?: string;
+  ward?: string;
+  onlyWard?: boolean;
   isEmergency?: boolean;
   search?: string;
   limit?: number;
@@ -49,7 +62,7 @@ function mapNoticeRow(row: Record<string, unknown>): NoticeRecord {
     title: row.title as string,
     description: row.description as string,
     category: row.category as string,
-    targetScope: row.target_scope as "Entire Municipality" | "Specific Wards",
+    targetScope: row.target_scope as NoticeTargetScope,
     targetWards: (row.target_wards as string) || null,
     priority: row.priority as "Normal" | "High" | "Urgent",
     isEmergency: Boolean(row.is_emergency),
@@ -70,6 +83,11 @@ export function generateNoticeId(): string {
   return `NOT-LMC-${year}-${hex}`;
 }
 
+export function extractWardNumber(wardStr: string): number | null {
+  const match = wardStr.match(/\d+/);
+  return match ? parseInt(match[0], 10) : null;
+}
+
 export const noticeDb = {
   /**
    * Creates a new official municipal notice in PostgreSQL
@@ -80,10 +98,24 @@ export const noticeDb = {
 
     const id = generateNoticeId();
     const status = params.status || "Published";
-    const priority = params.priority || "Normal";
-    const targetScope = params.targetScope || "Entire Municipality";
-    const isEmergency = Boolean(params.isEmergency);
-    const publishDate = params.publishDate ? new Date(params.publishDate) : new Date();
+    let priority = params.priority || "Normal";
+    const targetScope = params.targetScope || "Entire municipality";
+    let isEmergency = Boolean(params.isEmergency);
+    let targetWards = params.targetWards?.trim() || null;
+
+    if (targetScope === "Emergency / city-wide") {
+      isEmergency = true;
+      priority = "Urgent";
+      if (!targetWards) {
+        targetWards = "All Wards (Emergency Broadcast)";
+      }
+    } else if (targetScope === "All citizens" && !targetWards) {
+      targetWards = "All Citizens (01 - 23)";
+    } else if (targetScope === "Entire municipality" && !targetWards) {
+      targetWards = "Entire Municipality (City-Wide)";
+    }
+
+    const publishDate = params.publishDate ? new Date(params.publishDate) : null;
     const expiryDate = params.expiryDate ? new Date(params.expiryDate) : null;
 
     const sql = `
@@ -94,7 +126,7 @@ export const noticeDb = {
         created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11,
+        $7, $8, $9, COALESCE($10, CURRENT_TIMESTAMP), $11,
         $12, $13, $14,
         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       ) RETURNING *;
@@ -106,7 +138,7 @@ export const noticeDb = {
       params.description.trim(),
       params.category.trim(),
       targetScope,
-      params.targetWards?.trim() || null,
+      targetWards,
       priority,
       isEmergency,
       status,
@@ -150,6 +182,57 @@ export const noticeDb = {
     if (options.targetScope && options.targetScope !== "ALL") {
       conditions.push(`target_scope = $${paramIndex++}`);
       params.push(options.targetScope);
+    }
+
+    if (options.targetWard && options.targetWard.trim() && options.targetWard !== "ALL") {
+      const wardNum = extractWardNumber(options.targetWard);
+      if (wardNum !== null) {
+        const pad = String(wardNum).padStart(2, "0");
+        const patterns: string[] = [
+          `%Ward ${pad}%`,
+          `%Ward No. ${pad}%`,
+        ];
+        if (wardNum < 10) {
+          patterns.push(
+            `%Ward ${wardNum},%`,
+            `%Ward ${wardNum}`,
+            `Ward ${wardNum}`,
+            `%Ward No. ${wardNum},%`,
+            `%Ward No. ${wardNum}`
+          );
+        } else {
+          patterns.push(
+            `%Ward ${wardNum}%`,
+            `%Ward No. ${wardNum}%`
+          );
+        }
+
+        const wardMatchClauses = patterns.map((_, i) => `target_wards ILIKE $${paramIndex + i}`).join(" OR ");
+
+        if (options.onlyWard) {
+          conditions.push(`(
+            LOWER(target_scope) IN ('specific ward(s)', 'specific wards')
+            AND (${wardMatchClauses})
+          )`);
+        } else {
+          conditions.push(`(
+            LOWER(target_scope) IN ('all citizens', 'entire municipality', 'emergency / city-wide')
+            OR is_emergency = true
+            OR target_wards ILIKE '%All Wards%'
+            OR target_wards ILIKE '%All Citizens%'
+            OR target_wards ILIKE '%Entire Municipality%'
+            OR ${wardMatchClauses}
+          )`);
+        }
+        params.push(...patterns);
+        paramIndex += patterns.length;
+      } else {
+        conditions.push(`(
+          LOWER(target_scope) IN ('all citizens', 'entire municipality', 'emergency / city-wide')
+          OR target_wards ILIKE $${paramIndex++}
+        )`);
+        params.push(`%${options.targetWard.trim()}%`);
+      }
     }
 
     if (options.isEmergency !== undefined) {
@@ -311,22 +394,114 @@ export const noticeDb = {
   },
 
   /**
-   * Public list of published, active notices for CivSetu website
+   * Public list of published, active notices for CivSetu website with optional filtering
    */
-  async listPublic(limit = 20): Promise<NoticeRecord[]> {
+  async listPublic(
+    optionsOrLimit: number | PublicNoticeFilterOptions = 20
+  ): Promise<NoticeRecord[]> {
     await ensurePostgresTables();
     const pool = getPool();
+
+    const options: PublicNoticeFilterOptions =
+      typeof optionsOrLimit === "number" ? { limit: optionsOrLimit } : optionsOrLimit;
+
+    const conditions: string[] = [
+      "status = 'Published'",
+      "publish_date <= (CURRENT_TIMESTAMP + INTERVAL '10 minutes')",
+      "(expiry_date IS NULL OR expiry_date >= CURRENT_TIMESTAMP)",
+    ];
+    const params: unknown[] = [];
+    let pIdx = 1;
+
+    if (options.category && options.category !== "ALL") {
+      conditions.push(`category = $${pIdx++}`);
+      params.push(options.category);
+    }
+
+    if (options.priority && options.priority !== "ALL") {
+      conditions.push(`priority = $${pIdx++}`);
+      params.push(options.priority);
+    }
+
+    if (options.isEmergency !== undefined) {
+      conditions.push(`is_emergency = $${pIdx++}`);
+      params.push(options.isEmergency);
+    }
+
+    if (options.ward && options.ward.trim() && options.ward !== "ALL") {
+      const wardNum = extractWardNumber(options.ward);
+      if (wardNum !== null) {
+        const pad = String(wardNum).padStart(2, "0");
+        const patterns: string[] = [
+          `%Ward ${pad}%`,
+          `%Ward No. ${pad}%`,
+        ];
+        if (wardNum < 10) {
+          patterns.push(
+            `%Ward ${wardNum},%`,
+            `%Ward ${wardNum}`,
+            `Ward ${wardNum}`,
+            `%Ward No. ${wardNum},%`,
+            `%Ward No. ${wardNum}`
+          );
+        } else {
+          patterns.push(
+            `%Ward ${wardNum}%`,
+            `%Ward No. ${wardNum}%`
+          );
+        }
+
+        const wardMatchClauses = patterns.map((_, i) => `target_wards ILIKE $${pIdx + i}`).join(" OR ");
+
+        if (options.onlyWard) {
+          conditions.push(`(
+            LOWER(target_scope) IN ('specific ward(s)', 'specific wards')
+            AND (${wardMatchClauses})
+          )`);
+        } else {
+          conditions.push(`(
+            LOWER(target_scope) IN ('all citizens', 'entire municipality', 'emergency / city-wide')
+            OR is_emergency = true
+            OR target_wards ILIKE '%All Wards%'
+            OR target_wards ILIKE '%All Citizens%'
+            OR target_wards ILIKE '%Entire Municipality%'
+            OR ${wardMatchClauses}
+          )`);
+        }
+        params.push(...patterns);
+        pIdx += patterns.length;
+      } else {
+        conditions.push(`(
+          LOWER(target_scope) IN ('all citizens', 'entire municipality', 'emergency / city-wide')
+          OR target_wards ILIKE $${pIdx++}
+        )`);
+        params.push(`%${options.ward.trim()}%`);
+      }
+    }
+
+    if (options.search && options.search.trim()) {
+      conditions.push(
+        `(title ILIKE $${pIdx} OR description ILIKE $${pIdx} OR target_wards ILIKE $${pIdx} OR issued_by_department ILIKE $${pIdx})`
+      );
+      params.push(`%${options.search.trim()}%`);
+      pIdx++;
+    }
+
+    const limit = Math.min(Math.max(Number(options.limit) || 20, 1), 100);
+    const offset = Math.max(Number(options.offset) || 0, 0);
+
     const sql = `
       SELECT * FROM notices
-      WHERE status = 'Published'
-        AND publish_date <= CURRENT_TIMESTAMP
-        AND (expiry_date IS NULL OR expiry_date >= CURRENT_TIMESTAMP)
+      WHERE ${conditions.join(" AND ")}
       ORDER BY
         CASE WHEN is_emergency = true THEN 1 ELSE 2 END ASC,
-        publish_date DESC
-      LIMIT $1;
+        publish_date DESC,
+        created_at DESC
+      LIMIT $${pIdx++} OFFSET $${pIdx++};
     `;
-    const res = await pool.query(sql, [limit]);
+    params.push(limit, offset);
+
+    const res = await pool.query(sql, params);
     return res.rows.map(mapNoticeRow);
   },
 };

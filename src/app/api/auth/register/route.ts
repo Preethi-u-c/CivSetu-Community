@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. Validate Mobile
+    // 3. Validate Mobile Number (for contact / SMS communication)
     const cleanMobile = mobileNumber.toString().replace(/\D/g, "");
     if (!/^[6-9]\d{9}$/.test(cleanMobile)) {
       return NextResponse.json(
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Validate Email
+    // 4. Validate Email Address
     const cleanEmail = email.toString().trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       return NextResponse.json(
@@ -97,12 +97,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 8. Server-side OTP Verification
-    let otpVerified = await otpService.hasVerifiedOtp(cleanMobile, "registration");
+    // 8. Server-side Email OTP Verification
+    let otpVerified = await otpService.hasVerifiedOtp(cleanEmail, "registration");
     if (!otpVerified && otp) {
-      const verifyRes = await otpService.verifyOtp(cleanMobile, otp.toString(), "registration");
+      const verifyRes = await otpService.verifyOtp(cleanEmail, otp.toString(), "registration");
       if (verifyRes.success) {
         otpVerified = true;
+      }
+    }
+
+    // Fallback: also check mobile verification if citizen verified mobile instead
+    if (!otpVerified) {
+      otpVerified = await otpService.hasVerifiedOtp(cleanMobile, "registration");
+      if (!otpVerified && otp) {
+        const verifyRes = await otpService.verifyOtp(cleanMobile, otp.toString(), "registration");
+        if (verifyRes.success) {
+          otpVerified = true;
+        }
       }
     }
 
@@ -110,7 +121,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Mobile number verification via OTP is required before registration.",
+          error: "Email verification via OTP is required before registration.",
         },
         { status: 400 }
       );
@@ -154,6 +165,7 @@ export async function POST(req: NextRequest) {
     });
 
     // 13. Consume the verified OTP
+    await otpService.consumeVerifiedOtp(cleanEmail, "registration");
     await otpService.consumeVerifiedOtp(cleanMobile, "registration");
 
     // 14. Create session and set HTTP-only cookie

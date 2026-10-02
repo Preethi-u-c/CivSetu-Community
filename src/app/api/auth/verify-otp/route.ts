@@ -18,39 +18,41 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { identifier, otp, purpose } = body;
+    const { email, identifier, mobileNumber, otp, purpose } = body;
 
-    if (!identifier || !otp) {
+    const rawTarget = (email || identifier || mobileNumber || "").toString().trim();
+
+    if (!rawTarget || !otp) {
       return NextResponse.json(
-        { success: false, error: "Mobile number/email and OTP are required." },
+        { success: false, error: "Email/Mobile and verification OTP are required." },
         { status: 400 }
       );
     }
 
-    const rawId = identifier.toString().trim();
-    const cleanIdentifier = rawId.includes("@") ? rawId.toLowerCase() : rawId.replace(/\D/g, "");
+    const isEmail = rawTarget.includes("@");
+    const cleanIdentifier = isEmail ? rawTarget.toLowerCase() : rawTarget.replace(/\D/g, "");
     const cleanOtp = otp.toString().trim();
     const validPurpose = purpose === "password_reset" ? "password_reset" : "registration";
 
     let targetIdentifier = cleanIdentifier;
-    if (validPurpose === "password_reset" && rawId.includes("@")) {
+    if (validPurpose === "password_reset" && isEmail) {
       const citizen = await citizenDb.findByEmail(cleanIdentifier);
       if (citizen) {
-        targetIdentifier = citizen.mobileNumber;
+        targetIdentifier = citizen.email;
       }
     }
 
     const result = await otpService.verifyOtp(targetIdentifier, cleanOtp, validPurpose);
     if (!result.success) {
       return NextResponse.json(
-        { success: false, error: result.error || "Failed to verify OTP." },
+        { success: false, error: result.error || "Failed to verify code." },
         { status: 400 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      message: "Mobile number verified successfully.",
+      message: isEmail ? "Email address verified successfully." : "Mobile number verified successfully.",
     });
   } catch (error) {
     console.error("Error in /api/auth/verify-otp:", error);
