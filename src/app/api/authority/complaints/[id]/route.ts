@@ -149,6 +149,10 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const note = cleanText(body.note || body.notes);
     const reason = cleanText(body.reason || body.note || body.notes);
     const resolutionNotes = cleanText(body.resolutionNotes || body.note || body.notes, 4_000);
+    const resolutionPhotoUrl = body.resolutionPhotoUrl && typeof body.resolutionPhotoUrl === "string" ? body.resolutionPhotoUrl : null;
+    const resolutionLatitude = body.resolutionLatitude !== undefined && body.resolutionLatitude !== null ? Number(body.resolutionLatitude) : null;
+    const resolutionLongitude = body.resolutionLongitude !== undefined && body.resolutionLongitude !== null ? Number(body.resolutionLongitude) : null;
+
     if (note === null || reason === null || resolutionNotes === null) {
       return NextResponse.json(
         { success: false, error: "Text fields exceed the maximum allowed length." },
@@ -408,6 +412,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       const updated = await complaintDb.updateStatus(complaintId, {
         status: "Resolved",
         resolutionNotes: cleanNotes,
+        resolutionPhotoUrl,
+        resolutionLatitude,
+        resolutionLongitude,
         note: `Grievance resolved: ${cleanNotes}`,
         updatedBy: officerSignature,
       });

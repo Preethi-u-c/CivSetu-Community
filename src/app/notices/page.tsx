@@ -29,6 +29,8 @@ import { wardsData } from "@/data/wards";
 import { NoticeRecord } from "@/lib/db/notices";
 import { useAuth } from "@/context/AuthContext";
 import { VoiceInputButton } from "@/components/Voice/VoiceInputButton";
+import { useAccessibility } from "@/context/AccessibilityContext";
+import { NOTICES_TRANSLATIONS, NOTICES_CATEGORY_MAP } from "@/data/noticesTranslations";
 
 const CATEGORY_TABS = [
   { id: "ALL", label: "All Updates", icon: Bell },
@@ -41,6 +43,7 @@ const CATEGORY_TABS = [
 ];
 
 function NoticesContent() {
+  const { language } = useAccessibility();
   const { citizen, isAuthenticated } = useAuth();
   const searchParams = useSearchParams();
 
@@ -177,13 +180,27 @@ function NoticesContent() {
         <div className="max-w-3xl space-y-2">
           <div className="flex items-center gap-2 text-teal-200 text-xs font-bold uppercase tracking-wider">
             <Building className="w-4 h-4" />
-            <span>Lakshmeshwar Town Municipal Council • Official Gazette</span>
+            <span>
+              {language === "kn"
+                ? "ಲಕ್ಷ್ಮೇಶ್ವರ ಪುರಸಭೆ • ಅಧಿಕೃತ ಗೆಜೆಟ್"
+                : language === "hi"
+                ? "लक्ष्मेश्वर नगर पालिका • आधिकारिक राजपत्र"
+                : "Lakshmeshwar Town Municipal Council • Official Gazette"}
+            </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-            Public Announcements & Ward Updates
+            {language === "kn"
+              ? "ಸಾರ್ವಜನಿಕ ಪ್ರಕಟಣೆಗಳು ಹಾಗೂ ವಾರ್ಡ್ ವರದಿಗಳು"
+              : language === "hi"
+              ? "सार्वजनिक घोषणाएं एवं वार्ड अपडेट"
+              : "Public Announcements & Ward Updates"}
           </h1>
           <p className="text-xs sm:text-sm text-teal-100/90 leading-relaxed">
-            Real-time notifications for scheduled drinking water supplies, power interruptions, road works, sanitation drives, and civic emergency alerts targeted across all 23 municipal wards.
+            {language === "kn"
+              ? "ನಿಗದಿತ ಕುಡಿಯುವ ನೀರು ಸರಬರಾಜು, ವಿದ್ಯುತ್ ವ್ಯತ್ಯಯ, ರಸ್ತೆ ಕಾಮಗಾರಿ, ನೈರ್ಮಲ್ಯ ಅಭಿಯಾನ ಮತ್ತು ತುರ್ತು ಎಚ್ಚರಿಕೆಗಳ ಕುರಿತು 23 ವಾರ್ಡ್‌ಗಳ ನೈಜ-ಸಮಯದ ಪುರಸಭೆ ಪ್ರಕಟಣೆಗಳು."
+              : language === "hi"
+              ? "पेयजल आपूर्ति, बिजली कटौती, सड़क कार्य, स्वच्छता अभियान और आपातकालीन अलर्ट हेतु सभी 23 वार्डों के वास्तविक समय के अपडेट।"
+              : "Real-time notifications for scheduled drinking water supplies, power interruptions, road works, sanitation drives, and civic emergency alerts targeted across all 23 municipal wards."}
           </p>
         </div>
       </div>
@@ -285,6 +302,12 @@ function NoticesContent() {
         {CATEGORY_TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeCategory === tab.id;
+          const label = language === "kn"
+            ? (NOTICES_CATEGORY_MAP[tab.id]?.kn || tab.label)
+            : language === "hi"
+            ? (NOTICES_CATEGORY_MAP[tab.id]?.hi || tab.label)
+            : tab.label;
+
           return (
             <button
               key={tab.id}
@@ -296,7 +319,7 @@ function NoticesContent() {
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
-              <span>{tab.label}</span>
+              <span>{label}</span>
             </button>
           );
         })}
@@ -312,7 +335,13 @@ function NoticesContent() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search announcements (e.g. water pipeline, power outage, tax)..."
+              placeholder={
+                language === "kn"
+                  ? "ಪ್ರಕಟಣೆಗಳನ್ನು ಹುಡುಕಿ (ಉದಾ: ಕುಡಿಯುವ ನೀರು, ವಿದ್ಯುತ್, ರಸ್ತೆ ಕಾಮಗಾರಿ)..."
+                  : language === "hi"
+                  ? "घोषणाएं खोजें (उदा: पेयजल, बिजली कटौती, सड़क कार्य)..."
+                  : "Search announcements (e.g. water pipeline, power outage, tax)..."
+              }
               className="w-full pl-9 pr-12 py-2.5 border rounded-xl text-xs sm:text-sm dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:border-teal-600"
             />
             <div className="absolute right-2 top-1/2 -translate-y-1/2">
@@ -438,6 +467,17 @@ function NoticesContent() {
           </div>
         ) : (
           filteredNotices.map((n) => {
+            const localized = language === "kn" 
+              ? NOTICES_TRANSLATIONS[n.id]?.kn 
+              : language === "hi" 
+              ? NOTICES_TRANSLATIONS[n.id]?.hi 
+              : null;
+
+            const displayTitle = localized?.title || n.title;
+            const displayDesc = localized?.description || n.description;
+            const displayCat = localized?.category || (NOTICES_CATEGORY_MAP[n.category]?.[language as "kn" | "hi"] || n.category);
+            const displayDept = localized?.department || n.issuedByDepartment;
+
             const theme = getCategoryTheme(n.category);
             const CategoryIcon = theme.icon;
             const isCopied = copiedId === n.id;
@@ -463,13 +503,13 @@ function NoticesContent() {
                       className={`text-xs font-bold px-2.5 py-1 rounded-lg border flex items-center gap-1.5 ${theme.badge}`}
                     >
                       <CategoryIcon className="w-3.5 h-3.5" />
-                      <span>{n.category}</span>
+                      <span>{displayCat}</span>
                     </span>
 
                     {/* Emergency Alert Tag */}
                     {n.isEmergency && (
                       <span className="text-[11px] font-black px-2.5 py-1 rounded-lg bg-rose-600 text-white flex items-center gap-1 shadow-sm animate-pulse">
-                        <AlertTriangle className="w-3 h-3" /> CRITICAL ALERT
+                        <AlertTriangle className="w-3 h-3" /> {language === "kn" ? "ತುರ್ತು ಎಚ್ಚರಿಕೆ" : language === "hi" ? "आपातकालीन चेतावनी" : "CRITICAL ALERT"}
                       </span>
                     )}
 
@@ -477,7 +517,7 @@ function NoticesContent() {
                     {isCitizenWard && (
                       <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border border-teal-300 dark:border-teal-700 flex items-center gap-1 shadow-sm">
                         <Target className="w-3 h-3 text-[#064E4A] dark:text-teal-400" />
-                        <span>Directly Impacts Your Ward ({citizen?.wardNumber})</span>
+                        <span>{language === "kn" ? `ನಿಮ್ಮ ವಾರ್ಡ್‌ಗೆ ಅನ್ವಯ (${citizen?.wardNumber})` : language === "hi" ? `आपके वार्ड पर लागू (${citizen?.wardNumber})` : `Directly Impacts Your Ward (${citizen?.wardNumber})`}</span>
                       </span>
                     )}
 
@@ -491,7 +531,11 @@ function NoticesContent() {
                           : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
                       }`}
                     >
-                      {n.priority} Priority
+                      {n.priority === "Urgent"
+                        ? language === "kn" ? "ಅತಿ ತುರ್ತು" : language === "hi" ? "अति आवश्यक" : "Urgent Priority"
+                        : n.priority === "High"
+                        ? language === "kn" ? "ಹೆಚ್ಚಿನ ಆದ್ಯತೆ" : language === "hi" ? "उच्च प्राथमिकता" : "High Priority"
+                        : language === "kn" ? "ಸಾಮಾನ್ಯ" : language === "hi" ? "सामान्य" : `${n.priority} Priority`}
                     </span>
                   </div>
 
@@ -519,7 +563,7 @@ function NoticesContent() {
                       href={`/notices/${n.id}`}
                       className="hover:text-teal-700 dark:hover:text-teal-400 transition"
                     >
-                      {n.title}
+                      {displayTitle}
                     </Link>
                   </h2>
 
@@ -527,24 +571,24 @@ function NoticesContent() {
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
                     <MapPin className="w-3.5 h-3.5 text-[#064E4A] dark:text-teal-400 flex-shrink-0" />
                     <span className="font-bold text-gray-800 dark:text-gray-200">
-                      Geographic Scope:
+                      {language === "kn" ? "ವ್ಯಾಪ್ತಿ:" : language === "hi" ? "भौगोलिक दायरा:" : "Geographic Scope:"}
                     </span>
                     <span className="font-medium">
                       {n.targetScope === "Emergency / city-wide" ? (
                         <span className="text-rose-600 dark:text-rose-400 font-bold">
-                          Emergency / City-Wide Broadcast (All Citizens)
+                          {language === "kn" ? "ತುರ್ತು / ನಗರ-ವ್ಯಾಪ್ತಿಯ ಪ್ರಕಟಣೆ (ಎಲ್ಲಾ ನಾಗರಿಕರಿಗೆ)" : language === "hi" ? "आपातकालीन / नगर-व्यापी प्रसारण (सभी नागरिक)" : "Emergency / City-Wide Broadcast (All Citizens)"}
                         </span>
                       ) : n.targetScope === "All citizens" ? (
                         <span className="text-teal-700 dark:text-teal-300 font-semibold">
-                          All Citizens across Lakshmeshwar (01 - 23)
+                          {language === "kn" ? "ಲಕ್ಷ್ಮೇಶ್ವರದ ಎಲ್ಲಾ ನಾಗರಿಕರು (01 - 23)" : language === "hi" ? "लक्ष्मेश्वर के सभी नागरिक (01 - 23)" : "All Citizens across Lakshmeshwar (01 - 23)"}
                         </span>
                       ) : n.targetScope === "Entire municipality" || n.targetScope === "Entire Municipality" ? (
                         <span className="text-teal-700 dark:text-teal-300 font-semibold">
-                          Entire Municipality (City-Wide)
+                          {language === "kn" ? "ಸಮಗ್ರ ಪುರಸಭೆ ವ್ಯಾಪ್ತಿ" : language === "hi" ? "संपूर्ण नगर पालिका क्षेत्र" : "Entire Municipality (City-Wide)"}
                         </span>
                       ) : (
                         <span className="text-blue-700 dark:text-blue-300 font-semibold">
-                          Specific Ward(s): {n.targetWards || "Selected Localities"}
+                          {language === "kn" ? `ನಿಗದಿತ ವಾರ್ಡ್: ${n.targetWards}` : language === "hi" ? `विशिष्ट वार्ड: ${n.targetWards}` : `Specific Ward(s): ${n.targetWards || "Selected Localities"}`}
                         </span>
                       )}
                     </span>
@@ -553,7 +597,7 @@ function NoticesContent() {
 
                 {/* Description Body */}
                 <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
-                  {n.description}
+                  {displayDesc}
                 </p>
 
                 {/* Footer Authority & Validity */}

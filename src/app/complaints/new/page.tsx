@@ -1947,15 +1947,69 @@ export default function NewComplaintPage() {
               {/* Section 7: Photographic Evidence Upload */}
               <div id="field-photo" className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label htmlFor="complaint-photo-input" className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
-                    7. Photographic Evidence (Optional, max 5MB)
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="complaint-photo-input" className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
+                      7. Photographic Evidence (Optional, max 5MB)
+                    </label>
+                    {latitude !== null && longitude !== null ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>📍 Location captured ✓</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 text-[10px] font-bold border border-amber-200 dark:border-amber-800">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>📍 Location required for photo upload</span>
+                      </span>
+                    )}
+                  </div>
                   <span id="photo-format-hint" className="text-[11px] text-gray-500 dark:text-gray-400">
                     JPG, PNG, WebP supported
                   </span>
                 </div>
 
-                {!photoPreview ? (
+                {latitude === null || longitude === null ? (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={handleCaptureLocation}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleCaptureLocation();
+                      }
+                    }}
+                    className="border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 rounded-2xl p-6 text-center cursor-pointer transition opacity-70 hover:opacity-100 group"
+                  >
+                    <div className="w-12 h-12 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto mb-3">
+                      <MapPin className="w-6 h-6" />
+                    </div>
+                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-3">
+                      📍 Please capture your GPS location first before uploading a photo. This helps verify the complaint location.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCaptureLocation();
+                      }}
+                      disabled={isLocating}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#064E4A] hover:bg-[#0B6B63] text-white text-xs font-bold rounded-lg transition shadow-sm disabled:opacity-50"
+                    >
+                      {isLocating ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Acquiring Location...</span>
+                        </>
+                      ) : (
+                        <>
+                          <MapPin className="w-4 h-4" />
+                          <span>Get My Location</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : !photoPreview ? (
                   <div
                     tabIndex={0}
                     role="button"

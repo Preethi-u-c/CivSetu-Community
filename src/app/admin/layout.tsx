@@ -21,13 +21,15 @@ import {
   X,
   ExternalLink,
   ChevronRight,
-  ShieldAlert,
   Loader2,
   FileCheck,
   Newspaper,
   CalendarDays,
   Briefcase,
 } from "lucide-react";
+
+import { useIdleTimeout } from "@/hooks/useIdleTimeout";
+import { IdleTimeoutWarning } from "@/components/UI/IdleTimeoutWarning";
 
 interface AdminUser {
   id: string;
@@ -88,14 +90,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     };
   }, [pathname, isLoginPage, router]);
 
-  const handleLogout = async () => {
+  const handleLogout = async (reason?: string) => {
     try {
       await fetch("/api/admin/auth/logout", { method: "POST" });
     } catch {
       // Ignore network errors on logout
     }
-    router.replace("/admin/login");
+    router.replace(`/admin/login${reason ? `?reason=${reason}` : ""}`);
   };
+
+  const { isWarning, remainingSeconds, dismissWarning } = useIdleTimeout({
+    timeoutMinutes: 15,
+    warningMinutes: 2,
+    enabled: !isLoginPage && !loading && !!admin,
+    onLogout: () => handleLogout("idle"),
+  });
 
   // Close mobile sidebar on route change
   useEffect(() => {
@@ -169,6 +178,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen bg-[#F5F5F4] dark:bg-[#041211] text-gray-900 dark:text-gray-100 flex flex-col m-0 p-0">
+      {isWarning && (
+        <IdleTimeoutWarning
+          remainingSeconds={remainingSeconds}
+          onStayLoggedIn={dismissWarning}
+          onLogout={() => handleLogout("idle")}
+        />
+      )}
       {/* Top Banner */}
       <header className="bg-[#042F2E] text-white text-xs py-2 px-4 border-b border-teal-900/60 sticky top-0 z-40 m-0">
         <div className="w-full flex items-center justify-between gap-4 m-0">
@@ -196,14 +212,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <FileCheck className="w-3.5 h-3.5 text-amber-400" />
               <span>Applications</span>
             </Link>
-            <Link
-              href="/authority/dashboard"
-              className="hidden md:flex items-center gap-1 text-teal-300 hover:text-white transition"
-            >
-              <ShieldAlert className="w-3.5 h-3.5" />
-              <span>Authority Desk</span>
-              <ExternalLink className="w-3 h-3 opacity-70" />
-            </Link>
+
             <Link
               href="/"
               className="flex items-center gap-1 text-teal-200 hover:text-white transition"
@@ -286,7 +295,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
 
             <button
-              onClick={handleLogout}
+              onClick={() => handleLogout()}
               className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-teal-900/40 hover:bg-red-950/60 text-teal-200 hover:text-red-300 text-xs font-bold border border-teal-800 hover:border-red-800/60 transition"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -353,7 +362,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
               <div className="pt-4 border-t border-teal-700/60 mt-4 space-y-2">
                 <button
-                  onClick={handleLogout}
+                  onClick={() => handleLogout()}
                   className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-red-950/60 text-red-300 text-xs font-bold border border-red-800/60"
                 >
                   <LogOut className="w-4 h-4" />

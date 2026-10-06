@@ -67,27 +67,47 @@ export const Footer: React.FC = () => {
 
         <div className="relative max-w-[1000px] mx-auto space-y-2 leading-relaxed">
           <p className="font-semibold text-gray-100 uppercase tracking-wide">
-            CONTENT OWNED AND MAINTAINED BY: {footerAttribution.contentOwnedBy}
+            {language === "kn"
+              ? "ವಿಷಯದ ಮಾಲೀಕತ್ವ ಮತ್ತು ನಿರ್ವಹಣೆ: ಲಕ್ಷ್ಮೇಶ್ವರ ಪುರಸಭೆ ಕಾರ್ಯಾಲಯ, Gadag"
+              : language === "hi"
+              ? "सामग्री स्वामित्व एवं रखरखाव: लक्ष्मेश्वर नगर पालिका परिषद, Gadag"
+              : `CONTENT OWNED AND MAINTAINED BY: ${footerAttribution.contentOwnedBy}`}
           </p>
           <p className="text-gray-300">
-            Designed and Developed by: {footerAttribution.developedBy}
+            {language === "kn"
+              ? "ವಿನ್ಯಾಸ ಮತ್ತು ಅಭಿವೃದ್ಧಿ: ಕರ್ನಾಟಕ ಮುನ್ಸಿಪಲ್ ಡಾಟಾ ಸೊಸೈಟಿ (KMDS), ನಗರಾಭಿವೃದ್ಧಿ ಇಲಾಖೆ (UDD), ಬೆಂಗಳೂರು"
+              : language === "hi"
+              ? "डिजाइन एवं विकास: कर्नाटक म्यूनिसिपल डेटा सोसाइटी (KMDS), नगर विकास विभाग, बेंगलुरु"
+              : `Designed and Developed by: ${footerAttribution.developedBy}`}
           </p>
           <div className="pt-2 text-gray-400 space-y-0.5 text-[11px]">
             <p>
-              For any suggestions and complaints contact: {footerAttribution.contactPerson},
+              {language === "kn"
+                ? `ಯಾವುದೇ ಸಲಹೆಗಳು ಮತ್ತು ದೂರುಗಳಿಗಾಗಿ ಸಂಪರ್ಕಿಸಿ: ಮುಖ್ಯಾಧಿಕಾರಿಗಳು,`
+                : language === "hi"
+                ? `किसी भी सुझाव या शिकायत के लिए संपर्क करें: मुख्य अधिकारी / आयुक्त,`
+                : `For any suggestions and complaints contact: ${footerAttribution.contactPerson},`}
             </p>
             <p className="font-semibold text-gray-200 uppercase">
-              {footerAttribution.councilName},
+              {language === "kn"
+                ? "ಲಕ್ಷ್ಮೇಶ್ವರ ಪುರಸಭೆ ಕಾರ್ಯಾಲಯ,"
+                : language === "hi"
+                ? "लक्ष्मेश्वर नगर पालिका परिषद,"
+                : `${footerAttribution.councilName},`}
             </p>
             <p>
-              Contact Number:{" "}
+              {language === "kn"
+                ? "ದೂರವಾಣಿ ಸಂಖ್ಯೆ: "
+                : language === "hi"
+                ? "संपर्क नंबर: "
+                : "Contact Number: "}
               <a
                 href={`tel:${footerAttribution.contactNumber}`}
                 className="text-amber-400 hover:underline"
               >
                 {footerAttribution.contactNumber}
               </a>
-              , e-mail :{" "}
+              {language === "kn" ? ", ಇ-ಮೇಲ್ : " : language === "hi" ? ", ई-मेल : " : ", e-mail : "}
               <a
                 href={`mailto:${footerAttribution.email}`}
                 className="text-amber-400 hover:underline"

@@ -32,8 +32,15 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { CitizenService } from "@/lib/types/services";
+import { useAccessibility } from "@/context/AccessibilityContext";
+import {
+  SERVICES_TRANSLATIONS,
+  CATEGORY_TRANSLATIONS,
+  DEPARTMENT_TRANSLATIONS,
+} from "@/data/serviceTranslations";
 
 export default function ServiceDetailPage() {
+  const { language } = useAccessibility();
   const params = useParams();
   const id = params?.id as string;
 
@@ -125,8 +132,36 @@ export default function ServiceDetailPage() {
   }
 
   const Icon = getCategoryIcon(service.category);
-  const completedDocsCount = service.requiredDocuments.filter((d) => checkedDocs[d]).length;
-  const allDocsReady = completedDocsCount === service.requiredDocuments.length && service.requiredDocuments.length > 0;
+  const localized =
+    language === "kn"
+      ? SERVICES_TRANSLATIONS[service.id]?.kn
+      : language === "hi"
+      ? SERVICES_TRANSLATIONS[service.id]?.hi
+      : null;
+
+  const translateCategory = (cat: string) => {
+    if (language === "kn") return CATEGORY_TRANSLATIONS[cat]?.kn || cat;
+    if (language === "hi") return CATEGORY_TRANSLATIONS[cat]?.hi || cat;
+    return cat;
+  };
+
+  const translateDepartment = (dept: string) => {
+    if (language === "kn") return DEPARTMENT_TRANSLATIONS[dept]?.kn || dept;
+    if (language === "hi") return DEPARTMENT_TRANSLATIONS[dept]?.hi || dept;
+    return dept;
+  };
+
+  const serviceName = localized?.name || service.name;
+  const serviceCategory = localized?.category || translateCategory(service.category);
+  const serviceDepartment = localized?.department || translateDepartment(service.department);
+  const serviceDescription = localized?.description || service.description;
+  const serviceEligibility = localized?.eligibility || service.eligibility;
+  const serviceTimeline = localized?.expectedTimeline || service.expectedTimeline;
+  const serviceFee = localized?.fee || service.fee || (language === "kn" ? "ಉಚಿತ" : language === "hi" ? "निःशुल्क" : "Free of Cost");
+  const requiredDocuments = localized?.requiredDocuments || service.requiredDocuments;
+
+  const completedDocsCount = requiredDocuments.filter((d) => checkedDocs[d]).length;
+  const allDocsReady = completedDocsCount === requiredDocuments.length && requiredDocuments.length > 0;
 
   return (
     <div className="max-w-[1100px] mx-auto px-4 py-6 space-y-6">
@@ -137,7 +172,13 @@ export default function ServiceDetailPage() {
           className="inline-flex items-center gap-2 text-xs font-bold text-teal-800 dark:text-teal-400 hover:text-teal-950 dark:hover:text-teal-200 transition"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Services Directory</span>
+          <span>
+            {language === "kn"
+              ? "ನಾಗರಿಕ ಸೇವೆಗಳ ಪಟ್ಟಿಗೆ ಹಿಂತಿರುಗಿ"
+              : language === "hi"
+              ? "नागरिक सेवा सूची पर वापस जाएं"
+              : "Back to Services Directory"}
+          </span>
         </Link>
 
         <button
@@ -145,7 +186,19 @@ export default function ServiceDetailPage() {
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition shadow-sm"
         >
           {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-          <span>{copied ? "Link Copied!" : "Share Service"}</span>
+          <span>
+            {copied
+              ? language === "kn"
+                ? "ಲಿಂಕ್ ನಕಲಿಸಲಾಗಿದೆ!"
+                : language === "hi"
+                ? "लिंक कॉपी हुआ!"
+                : "Link Copied!"
+              : language === "kn"
+              ? "ಸೇವೆಯನ್ನು ಹಂಚಿಕೊಳ್ಳಿ"
+              : language === "hi"
+              ? "सेवा साझा करें"
+              : "Share Service"}
+          </span>
         </button>
       </div>
 
@@ -156,11 +209,17 @@ export default function ServiceDetailPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <span className="px-3 py-1 bg-white/20 backdrop-blur-sm text-white text-xs font-bold rounded-full">
-                {service.category}
+                {serviceCategory}
               </span>
               <span className="flex items-center gap-1 px-3 py-1 bg-teal-800/80 text-teal-100 text-xs font-semibold rounded-full border border-teal-500/40">
                 <Clock className="w-3.5 h-3.5 text-teal-300" />
-                <span>SLA: {service.expectedTimeline}</span>
+                <span>
+                  {language === "kn"
+                    ? `ಕಾಲಮಿತಿ: ${serviceTimeline}`
+                    : language === "hi"
+                    ? `समय सीमा: ${serviceTimeline}`
+                    : `SLA: ${serviceTimeline}`}
+                </span>
               </span>
             </div>
 
@@ -175,11 +234,11 @@ export default function ServiceDetailPage() {
             </div>
             <div className="space-y-1.5">
               <h1 className="text-2xl sm:text-3xl font-black tracking-tight leading-tight">
-                {service.name}
+                {serviceName}
               </h1>
               <div className="flex items-center gap-2 text-xs sm:text-sm text-teal-100">
                 <Building className="w-4 h-4 text-amber-300 flex-shrink-0" />
-                <span>{service.department}</span>
+                <span>{serviceDepartment}</span>
               </div>
             </div>
           </div>
@@ -193,10 +252,16 @@ export default function ServiceDetailPage() {
             <div className="space-y-2.5">
               <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-teal-600" />
-                <span>Service Overview & Scope</span>
+                <span>
+                  {language === "kn"
+                    ? "ಸೇವೆಯ ವಿವರಣೆ ಮತ್ತು ವ್ಯಾಪ್ತಿ"
+                    : language === "hi"
+                    ? "सेवा विवरण एवं दायरा"
+                    : "Service Overview & Scope"}
+                </span>
               </h2>
               <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
-                {service.description}
+                {serviceDescription}
               </p>
             </div>
 
@@ -204,10 +269,16 @@ export default function ServiceDetailPage() {
             <div className="space-y-3">
               <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-teal-600" />
-                <span>Citizen Eligibility & Applicability</span>
+                <span>
+                  {language === "kn"
+                    ? "ನಾಗರಿಕ ಅರ್ಹತಾ ಮಾನದಂಡಗಳು"
+                    : language === "hi"
+                    ? "नागरिक पात्रता दिशानिर्देश"
+                    : "Citizen Eligibility & Applicability"}
+                </span>
               </h2>
               <div className="p-4 bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-2xl text-xs sm:text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
-                {service.eligibility}
+                {serviceEligibility}
               </div>
             </div>
 
@@ -215,7 +286,13 @@ export default function ServiceDetailPage() {
             <div className="space-y-3">
               <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                 <ListOrdered className="w-4 h-4 text-teal-600" />
-                <span>Official Procedure & Application Steps</span>
+                <span>
+                  {language === "kn"
+                    ? "ಅಧಿಕೃತ ಕಾರ್ಯವಿಧಾನ ಮತ್ತು ಹಂತಗಳು"
+                    : language === "hi"
+                    ? "आधिकारिक प्रक्रिया एवं आवेदन चरण"
+                    : "Official Procedure & Application Steps"}
+                </span>
               </h2>
               <div className="p-5 bg-teal-50/50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 rounded-2xl text-xs sm:text-sm text-teal-950 dark:text-teal-100 leading-relaxed whitespace-pre-line">
                 {service.procedure}
@@ -227,19 +304,30 @@ export default function ServiceDetailPage() {
               <div className="flex items-center justify-between">
                 <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                   <FileCheck2 className="w-4 h-4 text-teal-600" />
-                  <span>Mandatory Documents Checklist</span>
+                  <span>
+                    {language === "kn"
+                      ? "ಕಡ್ಡಾಯ ದಾಖಲೆಗಳ ಪರಿಶೀಲನಾ ಪಟ್ಟಿ"
+                      : language === "hi"
+                      ? "अनिवार्य दस्तावेज चेकलिस्ट"
+                      : "Mandatory Documents Checklist"}
+                  </span>
                 </h2>
                 <span className="text-xs font-semibold text-gray-500">
-                  {completedDocsCount} of {service.requiredDocuments.length} checked
+                  {completedDocsCount} / {requiredDocuments.length}{" "}
+                  {language === "kn" ? "ಪರಿಶೀಲಿಸಲಾಗಿದೆ" : language === "hi" ? "सत्यापित" : "checked"}
                 </span>
               </div>
 
               <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 space-y-2.5">
                 <p className="text-[11px] text-gray-500 pb-1 border-b border-gray-200 dark:border-gray-700">
-                  Tick off the documents in your possession to confirm application readiness before submission:
+                  {language === "kn"
+                    ? "ಅರ್ಜಿ ಸಲ್ಲಿಸುವ ಮೊದಲು ನಿಮ್ಮ ಬಳಿ ಲಭ್ಯವಿರುವ ದಾಖಲೆಗಳನ್ನು ಗುರುತು ಮಾಡಿ ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ:"
+                    : language === "hi"
+                    ? "आवेदन जमा करने से पहले अपने पास उपलब्ध दस्तावेजों पर सही का निशान लगाएं:"
+                    : "Tick off the documents in your possession to confirm application readiness before submission:"}
                 </p>
 
-                {service.requiredDocuments.map((doc, idx) => {
+                {requiredDocuments.map((doc, idx) => {
                   const isChecked = Boolean(checkedDocs[doc]);
                   return (
                     <div
@@ -267,7 +355,11 @@ export default function ServiceDetailPage() {
 
                 {allDocsReady && (
                   <div className="p-3 bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 rounded-xl text-xs font-bold text-center mt-2">
-                    ✓ All mandatory documents are verified! You can proceed with application submission.
+                    {language === "kn"
+                      ? "✓ ಎಲ್ಲಾ ಕಡ್ಡಾಯ ದಾಖಲೆಗಳು ಸಿದ್ಧವಾಗಿವೆ! ನೀವು ಅರ್ಜಿ ಸಲ್ಲಿಕೆಗೆ ಮುಂದುವರಿಯಬಹುದು."
+                      : language === "hi"
+                      ? "✓ सभी आवश्यक दस्तावेज तैयार हैं! अब आप आवेदन प्रक्रिया के लिए आगे बढ़ सकते हैं।"
+                      : "✓ All mandatory documents are verified! You can proceed with application submission."}
                   </div>
                 )}
               </div>
@@ -278,34 +370,42 @@ export default function ServiceDetailPage() {
           <div className="lg:col-span-4 space-y-6">
             <div className="bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 space-y-5">
               <h3 className="font-extrabold text-sm text-gray-900 dark:text-gray-100 uppercase tracking-wider pb-2 border-b border-gray-200 dark:border-gray-700">
-                Service Parameters
+                {language === "kn" ? "ಸೇವೆಯ ನಿಯತಾಂಕಗಳು" : language === "hi" ? "सेवा पैरामीटर" : "Service Parameters"}
               </h3>
 
               <div className="space-y-4 text-xs sm:text-sm">
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400 block text-xs">Managing Department</span>
-                  <strong className="text-gray-900 dark:text-gray-100 font-semibold">{service.department}</strong>
+                  <span className="text-gray-500 dark:text-gray-400 block text-xs">
+                    {language === "kn" ? "ನಿರ್ವಹಣಾ ಇಲಾಖೆ" : language === "hi" ? "प्रबंधक विभाग" : "Managing Department"}
+                  </span>
+                  <strong className="text-gray-900 dark:text-gray-100 font-semibold">{serviceDepartment}</strong>
                 </div>
 
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400 block text-xs">Statutory Timeline (SLA)</span>
+                  <span className="text-gray-500 dark:text-gray-400 block text-xs">
+                    {language === "kn" ? "ಶಾಸನಬದ್ಧ ಕಾಲಮಿತಿ (SLA)" : language === "hi" ? "वैधानिक समय सीमा (SLA)" : "Statutory Timeline (SLA)"}
+                  </span>
                   <strong className="text-emerald-700 dark:text-emerald-400 font-bold flex items-center gap-1 mt-0.5">
                     <Clock className="w-4 h-4" />
-                    <span>{service.expectedTimeline}</span>
+                    <span>{serviceTimeline}</span>
                   </strong>
                 </div>
 
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400 block text-xs">Prescribed Fee</span>
+                  <span className="text-gray-500 dark:text-gray-400 block text-xs">
+                    {language === "kn" ? "ನಿಗದಿತ ಶುಲ್ಕ" : language === "hi" ? "निर्धारित शुल्क" : "Prescribed Fee"}
+                  </span>
                   <strong className="text-gray-900 dark:text-gray-100 font-semibold">
-                    {service.fee || "Free of Cost"}
+                    {serviceFee}
                   </strong>
                 </div>
 
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400 block text-xs">Category Classification</span>
+                  <span className="text-gray-500 dark:text-gray-400 block text-xs">
+                    {language === "kn" ? "ವರ್ಗೀಕರಣ" : language === "hi" ? "श्रेणी वर्गीकरण" : "Category Classification"}
+                  </span>
                   <span className="inline-block mt-0.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-teal-100 text-teal-900 dark:bg-teal-950 dark:text-teal-200">
-                    {service.category}
+                    {serviceCategory}
                   </span>
                 </div>
               </div>
@@ -320,21 +420,38 @@ export default function ServiceDetailPage() {
                       rel="noopener noreferrer"
                       className="w-full py-3 px-4 bg-[#064E4A] hover:bg-[#0B6B63] text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-2 shadow"
                     >
-                      <span>Apply on Official Portal</span>
+                      <span>
+                        {language === "kn"
+                          ? "ಅಧಿಕೃತ ಪೋರ್ಟಲ್‌ನಲ್ಲಿ ಅರ್ಜಿ ಸಲ್ಲಿಸಿ"
+                          : language === "hi"
+                          ? "आधिकारिक पोर्टल पर आवेदन करें"
+                          : "Apply on Official Portal"}
+                      </span>
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   ) : (
                     <Link
                       href={service.onlineApplicationLink}
+                      prefetch={true}
                       className="w-full py-3 px-4 bg-[#064E4A] hover:bg-[#0B6B63] text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-2 shadow"
                     >
-                      <span>Proceed to Online Application</span>
+                      <span>
+                        {language === "kn"
+                          ? "ಆನ್‌ಲೈನ್ ಅರ್ಜಿಗೆ ಮುಂದುವರಿಯಿರಿ"
+                          : language === "hi"
+                          ? "ऑनलाइन आवेदन के लिए आगे बढ़ें"
+                          : "Proceed to Online Application"}
+                      </span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </Link>
                   )
                 ) : (
                   <div className="p-3 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 rounded-xl text-center text-xs text-teal-950 dark:text-teal-200">
-                    Visit Lakshmeshwar TMC Janaseva Counter to apply in person.
+                    {language === "kn"
+                      ? "ನೇರವಾಗಿ ಅರ್ಜಿ ಸಲ್ಲಿಸಲು ಲಕ್ಷ್ಮೇಶ್ವರ ಪುರಸಭೆ ಜನಸೇವಾ ಕೌಂಟರ್‌ಗೆ ಭೇಟಿ ನೀಡಿ."
+                      : language === "hi"
+                      ? "व्यक्तिगत रूप से आवेदन करने हेतु लक्ष्मेश्वर नगर पालिका जनसेवा काउंटर पर संपर्क करें।"
+                      : "Visit Lakshmeshwar TMC Janaseva Counter to apply in person."}
                   </div>
                 )}
               </div>
@@ -344,13 +461,23 @@ export default function ServiceDetailPage() {
             <div className="p-4 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#071d1b] space-y-2 text-xs">
               <div className="flex items-center gap-2 text-gray-900 dark:text-gray-100 font-bold">
                 <Phone className="w-4 h-4 text-[#064E4A] dark:text-teal-400" />
-                <span>Contact & Officer In-Charge</span>
+                <span>
+                  {language === "kn"
+                    ? "ಸಂಪರ್ಕ ಮತ್ತು ಉಸ್ತುವಾರಿ ಅಧಿಕಾರಿ"
+                    : language === "hi"
+                    ? "संपर्क एवं प्रभारी अधिकारी"
+                    : "Contact & Officer In-Charge"}
+                </span>
               </div>
               <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
                 {service.contact}
               </p>
               <div className="pt-2 border-t border-gray-100 dark:border-gray-800 text-[11px] text-gray-500">
-                Lakshmeshwar Town Municipal Council • Office Hours: 10:00 AM – 5:30 PM
+                {language === "kn"
+                  ? "ಲಕ್ಷ್ಮೇಶ್ವರ ಪುರಸಭೆ • ಕಚೇರಿ ಸಮಯ: ಬೆಳಿಗ್ಗೆ 10:00 – ಸಂಜೆ 5:30"
+                  : language === "hi"
+                  ? "लक्ष्मेश्वर नगर पालिका परिषद • कार्यालय समय: सुबह 10:00 से शाम 5:30"
+                  : "Lakshmeshwar Town Municipal Council • Office Hours: 10:00 AM – 5:30 PM"}
               </div>
             </div>
           </div>

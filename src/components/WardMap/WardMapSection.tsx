@@ -242,11 +242,8 @@ export const WardMapSection: React.FC = () => {
                         strokeWidth={isSelected ? 3 : 1.8}
                         className="hover:opacity-95 hover:stroke-teal-700 cursor-pointer transition"
                         onClick={() => handleSelectWardNumber(wp.wardNumber)}
-                      >
-                        <title>
-                          Ward {wp.wardNumber} - Lakshmeshwar TMC
-                        </title>
-                      </path>
+                        aria-label={`Ward ${wp.wardNumber} - Lakshmeshwar TMC`}
+                      />
                       <text
                         x={wp.cx}
                         y={wp.cy}

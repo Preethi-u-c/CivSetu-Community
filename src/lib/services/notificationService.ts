@@ -7,6 +7,7 @@ import {
   sendComplaintResolvedEmail,
   sendEmergencyNoticeEmail,
   sendMunicipalAnnouncementEmail,
+  sendLocalNewsEmail,
 } from "./emailNotificationService";
 import { broadcastRealtimeEvent } from "./realtimeEvents";
 
@@ -20,7 +21,8 @@ export type ComplaintEventType =
   | "REMARK_ADDED"
   | "INFO_REQUESTED"
   | "SLA_WARNING"
-  | "NOTICE_PUBLISHED";
+  | "NOTICE_PUBLISHED"
+  | "NEWS_PUBLISHED";
 
 export interface DispatchNotificationParams {
   eventType: ComplaintEventType;
@@ -539,5 +541,57 @@ export const notificationService = {
         }
       })
       .catch((err) => console.error("Failed to fetch citizen emails for notice dispatch:", err));
+  },
+
+  /**
+   * Dispatches local news and ward-specific bulletin notifications (Requirement 7).
+   * Notifies citizens via in-app alerts, real-time SSE, and direct email broadcasts.
+   */
+  async notifyNewsPublished(news: {
+    id: string;
+    headline: string;
+    summary: string;
+    category?: string;
+    wardRelevance?: string;
+    authorName?: string;
+    imageUrl?: string;
+  }): Promise<void> {
+    const isWardSpecific = news.wardRelevance && news.wardRelevance !== "All Wards" && news.wardRelevance !== "ALL";
+
+    // In-app notification record
+    await this.dispatch({
+      eventType: "NEWS_PUBLISHED",
+      complaintId: null,
+      title: `Civic Bulletin: ${news.headline}`,
+      message: `${news.summary.slice(0, 160)}... (${news.category || "Civic Development"})`,
+    });
+
+    // Real-time SSE broadcast
+    broadcastRealtimeEvent("news_published" as any, {
+      id: news.id,
+      headline: news.headline,
+      summary: news.summary,
+      category: news.category || "Civic Development",
+      wardRelevance: news.wardRelevance || "All Wards",
+      authorName: news.authorName || "CivSetu News Desk",
+      timestamp: new Date().toISOString(),
+    });
+
+    // Targeted citizen emails (all wards or ward-specific)
+    citizenDb
+      .listCitizenEmails(isWardSpecific ? news.wardRelevance : undefined)
+      .then((citizens) => {
+        if (citizens.length === 0) return;
+        const emails = citizens.map((c) => c.email);
+        sendLocalNewsEmail(emails, {
+          headline: news.headline,
+          summary: news.summary,
+          category: news.category,
+          wardRelevance: news.wardRelevance,
+          authorName: news.authorName,
+          imageUrl: news.imageUrl,
+        }).catch((err) => console.error("Failed to send local news email:", err));
+      })
+      .catch((err) => console.error("Failed to fetch citizen emails for news dispatch:", err));
   },
 };

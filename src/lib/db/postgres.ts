@@ -226,6 +226,18 @@ export async function ensurePostgresTables(): Promise<void> {
       );
       const count = parseInt(checkRes.rows[0]?.count || "0", 10);
       if (count >= 3) {
+        // Run safe idempotency column additions for new features
+        try {
+          await pool.query(`
+            ALTER TABLE complaints ADD COLUMN IF NOT EXISTS resolution_photo_url TEXT;
+            ALTER TABLE complaints ADD COLUMN IF NOT EXISTS resolution_latitude DOUBLE PRECISION;
+            ALTER TABLE complaints ADD COLUMN IF NOT EXISTS resolution_longitude DOUBLE PRECISION;
+            ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS created_by_authority_id VARCHAR(64);
+            ALTER TABLE news_articles ADD COLUMN IF NOT EXISTS created_by_authority_name VARCHAR(255);
+          `);
+        } catch (colErr) {
+          console.warn("CivSetu column update notice:", colErr);
+        }
         globalForPg.pgTablesInitialized = true;
         return;
       }
@@ -291,6 +303,9 @@ export async function ensurePostgresTables(): Promise<void> {
         authority_level VARCHAR(64) NOT NULL DEFAULT 'Local Authority',
         deadline TIMESTAMP WITH TIME ZONE NOT NULL,
         resolution_notes TEXT,
+        resolution_photo_url TEXT,
+        resolution_latitude DOUBLE PRECISION,
+        resolution_longitude DOUBLE PRECISION,
         resolved_at TIMESTAMP WITH TIME ZONE,
         closed_at TIMESTAMP WITH TIME ZONE,
         reopened_reason TEXT,
@@ -475,6 +490,8 @@ export async function ensurePostgresTables(): Promise<void> {
         author_name VARCHAR(100) NOT NULL DEFAULT 'CivSetu News Desk',
         read_time_minutes INT NOT NULL DEFAULT 3,
         views_count INT NOT NULL DEFAULT 0,
+        created_by_authority_id VARCHAR(64),
+        created_by_authority_name VARCHAR(255),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
     );

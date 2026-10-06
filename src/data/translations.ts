@@ -163,6 +163,11 @@ export interface TranslationDictionary {
   };
   publicContent: {
     noticesTitle: string;
+    bulletinsSubtitle: string;
+    announcementsHeading: string;
+    viewAllAnnouncements: string;
+    emergency: string;
+    cityWide: string;
     newsTitle: string;
     eventsTitle: string;
     schemesTitle: string;
@@ -414,6 +419,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     },
     publicContent: {
       noticesTitle: "Public Announcements & Ward Notices",
+      bulletinsSubtitle: "Official Municipal Bulletins",
+      announcementsHeading: "Announcements & Public Gazette",
+      viewAllAnnouncements: "View All Ward Announcements",
+      emergency: "EMERGENCY",
+      cityWide: "City-Wide",
       newsTitle: "Lakshmeshwar Local News & Bulletins",
       eventsTitle: "Municipal Programs, Cultural Events & Festivals",
       schemesTitle: "Karnataka Government Welfare Schemes",
@@ -664,6 +674,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     },
     publicContent: {
       noticesTitle: "ಸಾರ್ವಜನಿಕ ಪ್ರಕಟಣೆಗಳು ಮತ್ತು ವಾರ್ಡ್ ಸೂಚನೆಗಳು",
+      bulletinsSubtitle: "ಅಧಿಕೃತ ಪುರಸಭೆ ಪ್ರಕಟಣೆಗಳು",
+      announcementsHeading: "ಪ್ರಕಟಣೆಗಳು ಮತ್ತು ಸಾರ್ವಜನಿಕ ಗೆಜೆಟ್",
+      viewAllAnnouncements: "ಎಲ್ಲಾ ವಾರ್ಡ್ ಪ್ರಕಟಣೆಗಳನ್ನು ವೀಕ್ಷಿಸಿ",
+      emergency: "ತುರ್ತು ಎಚ್ಚರಿಕೆ",
+      cityWide: "ನಗರದಾದ್ಯಂತ",
       newsTitle: "ಲಕ್ಷ್ಮೇಶ್ವರ ಸ್ಥಳೀಯ ಸಮಾಚಾರ ಮತ್ತು ಸುದ್ದಿ",
       eventsTitle: "ಪುರಸಭೆ ಕಾರ್ಯಕ್ರಮಗಳು, ಸಾಂಸ್ಕೃತಿಕ ಉತ್ಸವಗಳು",
       schemesTitle: "ಕರ್ನಾಟಕ ಸರ್ಕಾರದ ಸಾರ್ವಜನಿಕ ಕಲ್ಯಾಣ ಯೋಜನೆಗಳು",
@@ -914,6 +929,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     },
     publicContent: {
       noticesTitle: "सार्वजनिक घोषणाएं एवं वार्ड सूचनाएं",
+      bulletinsSubtitle: "आधिकारिक नगर पालिका बुलेटिन",
+      announcementsHeading: "घोषणाएं एवं सार्वजनिक राजपत्र (गजट)",
+      viewAllAnnouncements: "सभी वार्ड घोषणाएं देखें",
+      emergency: "आपातकालीन चेतावनी",
+      cityWide: "नगर-व्यापी",
       newsTitle: "लक्ष्मेश्वर स्थानीय समाचार एवं बुलेटिन",
       eventsTitle: "नगर पालिका कार्यक्रम, सांस्कृतिक उत्सव",
       schemesTitle: "कर्नाटक सरकार कल्याणकारी योजनाएं",

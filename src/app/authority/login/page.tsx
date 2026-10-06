@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ShieldCheck,
   Lock,
@@ -11,49 +12,27 @@ import {
   Building2,
   ArrowRight,
   AlertCircle,
+  ShieldAlert,
   RefreshCw,
-  Sparkles,
 } from "lucide-react";
 
 export default function AuthorityLoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F5F5F4] dark:bg-[#031514] flex items-center justify-center">Loading...</div>}>
+      <AuthorityLoginContent />
+    </Suspense>
+  );
+}
+
+function AuthorityLoginContent() {
+  const searchParams = useSearchParams();
+  const reasonParam = searchParams.get("reason");
+
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  const demoAccounts = [
-    {
-      title: "Chief Officer",
-      name: "Sri. Basavaraj Patil",
-      email: "commissioner@lakshmeshwar-tmc.gov.in",
-      role: "Municipal Commissioner",
-    },
-    {
-      title: "Water Supply Engineer",
-      name: "Smt. Sujata Deshmukh",
-      email: "aee.water@lakshmeshwar-tmc.gov.in",
-      role: "Assistant Executive Engineer",
-    },
-    {
-      title: "Health Inspector",
-      name: "Sri. Manjunath Gouda",
-      email: "health.sanitation@lakshmeshwar-tmc.gov.in",
-      role: "Sanitation Supervisor",
-    },
-    {
-      title: "Electrical Engineer",
-      name: "Sri. Ramesh Kulkarni",
-      email: "electrical@lakshmeshwar-tmc.gov.in",
-      role: "Junior Engineer (Lighting)",
-    },
-  ];
-
-  const handleDemoSelect = (email: string) => {
-    setIdentifier(email);
-    setPassword("Authority@Pass2026");
-    setError(null);
-  };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,6 +116,13 @@ export default function AuthorityLoginPage() {
             </div>
           )}
 
+          {reasonParam === "idle" && !error && (
+            <div className="p-3 mb-4 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-sm font-medium flex items-start gap-2 animate-in fade-in slide-in-from-top-2">
+              <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" />
+              <span>Your session expired due to inactivity. Please log in again.</span>
+            </div>
+          )}
+
           {/* Login Form */}
           <form onSubmit={handleLoginSubmit} noValidate className="space-y-4">
             <div>
@@ -207,32 +193,6 @@ export default function AuthorityLoginPage() {
               )}
             </button>
           </form>
-
-          {/* Quick Demo Accounts Selection */}
-          <div className="pt-2 border-t border-gray-200 dark:border-gray-800 space-y-2.5">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-gray-600 dark:text-gray-400">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Quick Municipal Officer Profiles (Testing)</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              {demoAccounts.map((acc) => (
-                <button
-                  key={acc.email}
-                  type="button"
-                  onClick={() => handleDemoSelect(acc.email)}
-                  className="p-2.5 text-left border border-teal-100 dark:border-teal-900 rounded-lg bg-teal-50/60 dark:bg-teal-950/40 hover:bg-teal-100/70 dark:hover:bg-teal-900/60 transition group"
-                >
-                  <p className="font-bold text-[#064E4A] dark:text-teal-300 group-hover:underline">
-                    {acc.title}
-                  </p>
-                  <p className="text-[11px] text-gray-600 dark:text-gray-400 truncate">{acc.name}</p>
-                </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-gray-500 text-center">
-              Password for demo accounts: <code className="font-mono bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">Authority@Pass2026</code>
-            </p>
-          </div>
 
           {/* Return link */}
           <div className="text-center pt-2">

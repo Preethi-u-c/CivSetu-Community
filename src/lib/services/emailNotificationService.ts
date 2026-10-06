@@ -588,3 +588,73 @@ export async function sendMunicipalAnnouncementEmail(
   const html = wrapEmailHtml(content, `Official Notice: ${data.title}`);
   return sendMailWrapper(toEmails, subject, html);
 }
+
+// =============================================================================
+// 6. Local & Ward News Announcement Email (Requirement 7)
+// =============================================================================
+
+export interface LocalNewsEmailData {
+  headline: string;
+  summary: string;
+  category?: string;
+  wardRelevance?: string;
+  authorName?: string;
+  imageUrl?: string;
+  portalUrl?: string;
+}
+
+export async function sendLocalNewsEmail(
+  toEmails: string | string[],
+  data: LocalNewsEmailData
+): Promise<EmailSendResult> {
+  const baseUrl = data.portalUrl || getBasePortalUrl();
+  const newsUrl = `${baseUrl}/news`;
+
+  const content = `
+    <!-- News Header -->
+    <div style="background-color: #064e4a; color: #ffffff; padding: 14px 18px; border-radius: 8px; margin-bottom: 24px; text-align: center; border-bottom: 3px solid #f59e0b;">
+      <h2 style="margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: #f59e0b;">
+        📰 CivSetu Local News & Bulletin
+      </h2>
+      <p style="margin: 4px 0 0 0; font-size: 12px; color: #99f6e4;">
+        Ward & Civic Updates • Lakshmeshwar Town Municipal Council
+      </p>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+      <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #042f2e; font-weight: 700;">
+        ${data.headline}
+      </h3>
+      <div style="margin: 4px 0 16px 0;">
+        <span style="display: inline-block; background-color: #ccfbf1; color: #0f766e; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; margin-right: 8px;">
+          ${data.category || "Civic Development"}
+        </span>
+        <span style="display: inline-block; background-color: #fef3c7; color: #b45309; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 4px;">
+          📍 ${data.wardRelevance || "All Wards"}
+        </span>
+      </div>
+    </div>
+
+    <!-- News Body -->
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+      <p style="font-size: 14px; line-height: 1.6; color: #334155; margin: 0;">
+        ${data.summary}
+      </p>
+      ${data.authorName ? `
+      <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed #cbd5e1; font-size: 12px; color: #64748b;">
+        Reporting Desk: <strong>${data.authorName}</strong>
+      </div>
+      ` : ""}
+    </div>
+
+    <div style="text-align: center; margin: 24px 0 12px 0;">
+      <a href="${newsUrl}" style="background-color: #0d9488; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 14px; display: inline-block;">
+        Read Full Story on CivSetu Portal &rarr;
+      </a>
+    </div>
+  `;
+
+  const subject = `[CIVIC NEWS] CivSetu - ${data.headline}`;
+  const html = wrapEmailHtml(content, `Local Civic Bulletin: ${data.headline}`);
+  return sendMailWrapper(toEmails, subject, html);
+}

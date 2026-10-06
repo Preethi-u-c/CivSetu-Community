@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Home, Info, PhoneCall, User, UserPlus, LogOut, Menu, X, Bell, Newspaper, CalendarDays, Landmark, Briefcase, Sparkles } from "lucide-react";
 import { useAccessibility } from "@/context/AccessibilityContext";
 import { useAuth } from "@/context/AuthContext";
@@ -10,9 +10,21 @@ import { NotificationBell } from "./NotificationBell";
 
 export const NavBar: React.FC = () => {
   const pathname = usePathname();
+  const router = useRouter();
   const { t, language, setLanguage } = useAccessibility();
   const { citizen: currentUser, logout: handleLogout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Proactively prefetch common navigation routes on mount so transitions are instant
+  useEffect(() => {
+    ["/services", "/notices", "/news", "/events", "/schemes", "/ask-civsetu", "/contact", "/dashboard", "/login"].forEach(
+      (path) => {
+        try {
+          router.prefetch(path);
+        } catch {}
+      }
+    );
+  }, [router]);
 
   // Close mobile menu on Escape key press
   useEffect(() => {

@@ -19,6 +19,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { VoiceInputButton } from "@/components/Voice/VoiceInputButton";
+import { useAccessibility } from "@/context/AccessibilityContext";
 
 interface ActionItem {
   label: string;
@@ -34,24 +35,61 @@ interface ChatMessage {
   isRealAI?: boolean;
 }
 
-const POPULAR_QUERIES = [
-  "How do I report a water problem?",
-  "Where can I find municipal services?",
-  "What documents are needed?",
-  "What is the status of my complaint?",
-  "Which department handles streetlights?",
-  "ಕುಡಿಯುವ ನೀರಿನ ದೂರು ಹೇಗೆ ದಾಖಲಿಸುವುದು?",
-  "What are the door-to-door garbage timings?",
-  "How do I apply for an E-Swathu Khata extract?",
-];
-
 export default function AskCivSetuPage() {
+  const { language } = useAccessibility();
   const { citizen } = useAuth();
   const [query, setQuery] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      sender: "bot",
-      text: `Namaskara! I am CivSetu, your official AI Civic Assistant for Lakshmeshwar Town Municipal Council (TMC), Gadag District, Karnataka.
+
+  const popularQueries = language === "kn" ? [
+    "ಕುಡಿಯುವ ನೀರಿನ ಸಮಸ್ಯೆ ಹೇಗೆ ವರದಿ ಮಾಡುವುದು?",
+    "ಪುರಸಭೆಯ ಸೇವೆಗಳು ಎಲ್ಲಿ ಸಿಗುತ್ತವೆ?",
+    "ಯಾವ ದಾಖಲೆಗಳು ಬೇಕಾಗುತ್ತವೆ?",
+    "ನನ್ನ ದೂರನ್ನು ಟ್ರ್ಯಾಕ್ ಮಾಡುವುದು ಹೇಗೆ?",
+    "ಬೀದಿದೀಪಗಳ ಸಮಸ್ಯೆಯನ್ನು ಯಾವ ವಿಭಾಗ ನಿರ್ವಹಿಸುತ್ತದೆ?",
+    "ಕಸ ಸಂಗ್ರಹಣೆಯ ವೇಳಾಪಟ್ಟಿ ಯಾವುದು?",
+    "ಇ-ಸ್ವತ್ತು ಖಾತಾ ನಕಲಿಗೆ ಹೇಗೆ ಅರ್ಜಿ ಸಲ್ಲಿಸುವುದು?",
+  ] : language === "hi" ? [
+    "पेयजल समस्या की शिकायत कैसे करें?",
+    "नगर पालिका सेवाएं कहां मिलेंगी?",
+    "कौन से दस्तावेज आवश्यक हैं?",
+    "मेरी शिकायत की स्थिति क्या है?",
+    "स्ट्रीट लाइट का कार्य कौन सा विभाग देखता है?",
+    "घर-घर कचरा संग्रहण का समय क्या है?",
+    "ई-स्वथु खाता प्रति हेतु आवेदन कैसे करें?",
+  ] : [
+    "How do I report a water problem?",
+    "Where can I find municipal services?",
+    "What documents are needed?",
+    "What is the status of my complaint?",
+    "Which department handles streetlights?",
+    "ಕುಡಿಯುವ ನೀರಿನ ದೂರು ಹೇಗೆ ದಾಖಲಿಸುವುದು?",
+    "What are the door-to-door garbage timings?",
+    "How do I apply for an E-Swathu Khata extract?",
+  ];
+
+  const initialBotMessage: ChatMessage = {
+    sender: "bot",
+    text: language === "kn"
+      ? `ನಮಸ್ಕಾರ! ನಾನು ಸಿವಿಸೇತು, ಕರ್ನಾಟಕದ ಗದಗ ಜಿಲ್ಲೆಯ ಲಕ್ಷ್ಮೇಶ್ವರ ಪುರಸಭೆಯ (ಟಿಎಂಸಿ) ಅಧಿಕೃತ AI ನಾಗರಿಕ ಸಹಾಯಕ.
+
+ನೀವು ಈ ಕೆಳಗಿನವುಗಳ ಕುರಿತು ನನ್ನನ್ನು ಕೇಳಬಹುದು:
+• ನಾಗರಿಕ ದೂರುಗಳನ್ನು ದಾಖಲಿಸುವುದು ಮತ್ತು ಟ್ರ್ಯಾಕ್ ಮಾಡುವುದು (ಕುಡಿಯುವ ನೀರು, ಬೀದಿದೀಪ, ಚರಂಡಿ, ರಸ್ತೆ ಗುಂಡಿಗಳು)
+• ಪುರಸಭೆಯ ಪ್ರಮಾಣಪತ್ರಗಳು ಮತ್ತು ಇ-ಸ್ವತ್ತು ಖಾತಾ (ಫಾರ್ಮ್-3) ಪ್ರಕ್ರಿಯೆಗಳು
+• ಸರ್ಕಾರಿ ಕಲ್ಯಾಣ ಯೋಜನೆಗಳ ಅರ್ಹತೆ ಮತ್ತು ಅಗತ್ಯ ದಾಖಲೆಗಳು
+• ಇಲಾಖಾ ವ್ಯಾಪ್ತಿ ಮತ್ತು ಶಾಸನಬದ್ಧ ಎಸ್‌ಎಲ್‌ಎ ಪರಿಹಾರ ಕಾಲಮಿತಿಗಳು
+
+ಇಂದು ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?`
+      : language === "hi"
+      ? `नमस्कार! मैं सिविसेतु हूँ, गदग जिला, कर्नाटक की लक्ष्मेश्वर नगर पालिका परिषद (TMC) का आधिकारिक AI नागरिक सहायक।
+
+आप मुझसे इन विषयों पर जानकारी प्राप्त कर सकते हैं:
+• नागरिक शिकायतें दर्ज करना एवं ट्रैक करना (पेयजल, स्ट्रीट लाइट, स्वच्छता, गड्ढे)
+• नगर पालिका प्रमाण पत्र एवं ई-स्वथु खाता (फॉर्म-3) प्रक्रियाएं
+• सरकारी कल्याणकारी योजनाओं हेतु पात्रता एवं आवश्यक दस्तावेज
+• विभाग के अधिकार क्षेत्र एवं वैधानिक समाधान समय-सीमा
+
+आज मैं आपकी किस प्रकार सहायता कर सकता हूँ?`
+      : `Namaskara! I am CivSetu, your official AI Civic Assistant for Lakshmeshwar Town Municipal Council (TMC), Gadag District, Karnataka.
 
 You can ask me anything about:
 • How to file and track civic grievances (drinking water, streetlights, sanitation, potholes)
@@ -60,15 +98,20 @@ You can ask me anything about:
 • Department jurisdictions and statutory SLA resolution timelines
 
 How may I assist you today?`,
-      department: "Citizen Facilitation Centre (CFC), Lakshmeshwar TMC",
-      actions: [
-        { label: "Report a Grievance", url: "/complaints/new" },
-        { label: "Services Directory", url: "/services" },
-        { label: "Track Case Status", url: "/track" },
-        { label: "Welfare Schemes", url: "/schemes" },
-      ],
-    },
-  ]);
+    department: language === "kn" ? "ನಾಗರಿಕ ಸೇವಾ ಕೇಂದ್ರ (CFC), ಲಕ್ಷ್ಮೇಶ್ವರ ಪುರಸಭೆ" : language === "hi" ? "नागरिक सुविधा केंद्र (CFC), लक्ष्मेश्वर नगर पालिका" : "Citizen Facilitation Centre (CFC), Lakshmeshwar TMC",
+    actions: [
+      { label: language === "kn" ? "ದೂರು ಸಲ್ಲಿಸಿ" : language === "hi" ? "शिकायत दर्ज करें" : "Report a Grievance", url: "/complaints/new" },
+      { label: language === "kn" ? "ಸೇವೆಗಳ ಡೈರೆಕ್ಟರಿ" : language === "hi" ? "सेवाएं डायरेक्टरी" : "Services Directory", url: "/services" },
+      { label: language === "kn" ? "ಸ್ಥಿತಿ ಪರಿಶೀಲಿಸಿ" : language === "hi" ? "स्थिति जांचें" : "Track Case Status", url: "/track" },
+      { label: language === "kn" ? "ಕಲ್ಯಾಣ ಯೋಜನೆಗಳು" : language === "hi" ? "कल्याण योजनाएं" : "Welfare Schemes", url: "/schemes" },
+    ],
+  };
+
+  const [messages, setMessages] = useState<ChatMessage[]>([initialBotMessage]);
+
+  useEffect(() => {
+    setMessages([initialBotMessage]);
+  }, [language]);
   const [thinking, setThinking] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
@@ -135,9 +178,21 @@ How may I assist you today?`,
 
   return (
     <PageContainer
-      title="Ask CivSetu AI"
-      subtitle="Official Municipal Intelligence & Citizen Assistance Portal — Lakshmeshwar TMC"
-      breadcrumbs={[{ label: "CivSetu AI" }]}
+      title={
+        language === "kn"
+          ? "ಸಿವಿಸೇತು AI ಸಹಾಯವಾಣಿ"
+          : language === "hi"
+          ? "सिवಿसेतु AI नागरिक सहायक"
+          : "Ask CivSetu AI"
+      }
+      subtitle={
+        language === "kn"
+          ? "ಅಧಿಕೃತ ಪುರಸಭೆ ಮಾಹಿತಿ ಹಾಗೂ ನಾಗರಿಕ ನೆರವು ಪೋರ್ಟಲ್ — ಲಕ್ಷ್ಮೇಶ್ವರ ಪುರಸಭೆ"
+          : language === "hi"
+          ? "आधिकारिक नगर पालिका बुद्धिमत्ता एवं नागरिक सहायता पोर्टल — लक्ष्मेश्वर नगर पालिका"
+          : "Official Municipal Intelligence & Citizen Assistance Portal — Lakshmeshwar TMC"
+      }
+      breadcrumbs={[{ label: language === "kn" ? "ಸಿವಿಸೇತು AI" : language === "hi" ? "सिवಿसेतु AI" : "CivSetu AI" }]}
     >
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Top Disclaimer Card */}
@@ -147,10 +202,18 @@ How may I assist you today?`,
           </div>
           <div className="space-y-0.5 flex-1 text-gray-700 dark:text-gray-300">
             <p className="font-bold text-[#064E4A] dark:text-teal-300">
-              Lakshmeshwar Municipal AI Civic Advisor
+              {language === "kn"
+                ? "ಲಕ್ಷ್ಮೇಶ್ವರ ಪುರಸಭೆ AI ನಾಗರಿಕ ಸಲಹೆಗಾರ"
+                : language === "hi"
+                ? "लक्ष्मेश्वर नगर पालिका AI नागरिक सलाहकार"
+                : "Lakshmeshwar Municipal AI Civic Advisor"}
             </p>
             <p className="text-[11px] leading-relaxed text-gray-600 dark:text-gray-400">
-              Guidance is grounded in the Karnataka Municipalities Act and the Lakshmeshwar TMC Citizen Charter. Official statutory determinations and field verifications take precedence.
+              {language === "kn"
+                ? "ಮಾರ್ಗದರ್ಶನವು ಕರ್ನಾಟಕ ಪೌರಸಭೆಗಳ ಕಾಯ್ದೆ ಮತ್ತು ಲಕ್ಷ್ಮೇಶ್ವರ ಪುರಸಭೆಯ ಸಿಟಿಜನ್ ಚಾರ್ಟರ್ ಅನ್ನು ಆಧರಿಸಿದೆ. ಅಧಿಕೃತ ಶಾಸನಬದ್ಧ ನಿರ್ಣಯಗಳು ಮತ್ತು ಸ್ಥಳ ಪರಿಶೀಲನೆಗಳು ಅಂತಿಮವಾಗಿರುತ್ತವೆ."
+                : language === "hi"
+                ? "यह मार्गदर्शन कर्नाटक नगर पालिका अधिनियम एवं लक्ष्मेश्वर TMC नागरिक चार्टर पर आधारित है। आधिकारिक वैधानिक निर्णय एवं स्थल सत्यापन मान्य होंगे।"
+                : "Guidance is grounded in the Karnataka Municipalities Act and the Lakshmeshwar TMC Citizen Charter. Official statutory determinations and field verifications take precedence."}
             </p>
           </div>
         </div>
@@ -165,35 +228,27 @@ How may I assist you today?`,
               </div>
               <div>
                 <h3 className="font-bold text-sm sm:text-base flex items-center gap-2">
-                  <span>CivSetu Civic Assistant</span>
+                  <span>{language === "kn" ? "ಸಿವಿಸೇತು AI ಸಹಾಯಕ" : language === "hi" ? "सिवಿसेतु नागरिक सहायक" : "CivSetu Civic Assistant"}</span>
                   <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-400 text-teal-950 uppercase tracking-wider">
-                    AI Enabled
+                    {language === "kn" ? "AI ಸಶಕ್ತ" : language === "hi" ? "AI सक्षम" : "AI Enabled"}
                   </span>
                 </h3>
                 <p className="text-[11px] text-teal-100/90">
-                  {citizen ? `Assisting ${citizen.fullName} • Ward: ${citizen.wardNumber}` : "Serving All 23 Wards of Lakshmeshwar TMC"}
+                  {citizen
+                    ? `${citizen.fullName} • ${language === "kn" ? "ವಾರ್ಡ್" : language === "hi" ? "वार्ड" : "Ward"}: ${citizen.wardNumber}`
+                    : language === "kn" ? "ಲಕ್ಷ್ಮೇಶ್ವರ ಪುರಸಭೆಯ ಎಲ್ಲಾ 23 ವಾರ್ಡ್‌ಗಳ ಸೇವೆಗೆ ಲಭ್ಯ" : language === "hi" ? "लक्ष्मेश्वर TMC के सभी 23 वार्डों की सेवा में" : "Serving All 23 Wards of Lakshmeshwar TMC"}
                 </p>
               </div>
             </div>
 
             <button
               onClick={() => {
-                setMessages([
-                  {
-                    sender: "bot",
-                    text: "Conversation restarted. How can I assist you with Lakshmeshwar municipal services?",
-                    department: "Citizen Facilitation Centre (CFC), Lakshmeshwar TMC",
-                    actions: [
-                      { label: "Report a Grievance", url: "/complaints/new" },
-                      { label: "Services Directory", url: "/services" },
-                    ],
-                  },
-                ]);
+                setMessages([initialBotMessage]);
               }}
               className="px-3 py-1.5 bg-white/15 hover:bg-white/25 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Reset</span>
+              <span>{language === "kn" ? "ಮರುಹೊಂದಿಸಿ" : language === "hi" ? "रीसेट" : "Reset"}</span>
             </button>
           </div>
 
@@ -247,7 +302,7 @@ How may I assist you today?`,
                         <ShieldCheck className="w-2.5 h-2.5 text-teal-600" />
                         <span>{m.provider || "CivSetu Municipal Intelligence"}</span>
                       </span>
-                      <span>Citizen Charter</span>
+                      <span>{language === "kn" ? "ನಾಗರಿಕ ಸನ್ನದು" : language === "hi" ? "नागरिक चार्टर" : "Citizen Charter"}</span>
                     </div>
                   )}
                 </div>
@@ -257,7 +312,7 @@ How may I assist you today?`,
             {thinking && (
               <div className="flex items-center gap-2 p-3.5 rounded-2xl bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-xs w-fit border border-gray-200 dark:border-gray-700 shadow-xs">
                 <Sparkles className="w-3.5 h-3.5 text-[#064E4A] dark:text-teal-400 animate-spin" />
-                <span>CivSetu is consulting municipal rules...</span>
+                <span>{language === "kn" ? "ಸಿವಿಸೇತು ಪುರಸಭೆಯ ನಿಯಮಗಳನ್ನು ಪರಿಶೀಲಿಸುತ್ತಿದೆ..." : language === "hi" ? "सिविसेतु नगर पालिका नियमों का सत्यापन कर रहा है..." : "CivSetu is consulting municipal rules..."}</span>
               </div>
             )}
 
@@ -268,9 +323,9 @@ How may I assist you today?`,
           <div className="px-5 py-2.5 bg-gray-50 dark:bg-gray-900/60 border-t border-gray-100 dark:border-gray-800 flex items-center gap-1.5 overflow-x-auto text-[11px]">
             <span className="text-gray-400 font-bold flex-shrink-0 flex items-center gap-1">
               <HelpCircle className="w-3 h-3" />
-              <span>Suggested:</span>
+              <span>{language === "kn" ? "ಸೂಚಿತ ಪ್ರಶ್ನೆಗಳು:" : language === "hi" ? "सुझावित प्रश्न:" : "Suggested:"}</span>
             </span>
-            {POPULAR_QUERIES.map((sugg) => (
+            {popularQueries.map((sugg) => (
               <button
                 key={sugg}
                 type="button"
@@ -295,7 +350,13 @@ How may I assist you today?`,
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ask about water, streetlights, services, or paste complaint ID..."
+              placeholder={
+                language === "kn"
+                  ? "ಕುಡಿಯುವ ನೀರು, ಬೀದಿದೀಪ, ಸೇವೆಗಳ ಬಗ್ಗೆ ಕೇಳಿ ಅಥವಾ ದೂರು ಸಂಖ್ಯೆ ನಮೂದಿಸಿ..."
+                  : language === "hi"
+                  ? "पानी, स्ट्रीट लाइट, सेवाओं के बारे में पूछें या शिकायत संख्या दर्ज करें..."
+                  : "Ask about water, streetlights, services, or paste complaint ID..."
+              }
               disabled={thinking}
               className="flex-1 px-4 py-2.5 text-xs sm:text-sm bg-gray-50 dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 rounded-xl focus:outline-none focus:border-[#064E4A] dark:focus:border-teal-400"
             />

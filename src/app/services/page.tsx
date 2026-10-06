@@ -33,7 +33,15 @@ import {
   ServiceCategory,
 } from "@/lib/types/services";
 
+import { useAccessibility } from "@/context/AccessibilityContext";
+import {
+  SERVICES_TRANSLATIONS,
+  CATEGORY_TRANSLATIONS,
+  DEPARTMENT_TRANSLATIONS,
+} from "@/data/serviceTranslations";
+
 function ServicesContent() {
+  const { t, language } = useAccessibility();
   const searchParams = useSearchParams();
 
   const urlCategory = searchParams?.get("category") || "ALL";
@@ -73,16 +81,42 @@ function ServicesContent() {
       if (selectedDepartment !== "ALL" && s.department !== selectedDepartment) return false;
       if (search.trim()) {
         const q = search.trim().toLowerCase();
-        const inName = s.name.toLowerCase().includes(q);
-        const inDesc = s.description.toLowerCase().includes(q);
-        const inDept = s.department.toLowerCase().includes(q);
-        const inProc = s.procedure.toLowerCase().includes(q);
-        const inElig = s.eligibility.toLowerCase().includes(q);
-        return inName || inDesc || inDept || inProc || inElig;
+        const localized =
+          language === "kn"
+            ? SERVICES_TRANSLATIONS[s.id]?.kn
+            : language === "hi"
+            ? SERVICES_TRANSLATIONS[s.id]?.hi
+            : null;
+
+        const nameStr = `${s.name} ${localized?.name || ""}`.toLowerCase();
+        const descStr = `${s.description} ${localized?.description || ""}`.toLowerCase();
+        const deptStr = `${s.department} ${localized?.department || ""}`.toLowerCase();
+        const procStr = s.procedure.toLowerCase();
+        const eligStr = `${s.eligibility} ${localized?.eligibility || ""}`.toLowerCase();
+
+        return (
+          nameStr.includes(q) ||
+          descStr.includes(q) ||
+          deptStr.includes(q) ||
+          procStr.includes(q) ||
+          eligStr.includes(q)
+        );
       }
       return true;
     });
-  }, [allServices, activeCategory, selectedDepartment, search]);
+  }, [allServices, activeCategory, selectedDepartment, search, language]);
+
+  const translateCategory = (cat: string) => {
+    if (language === "kn") return CATEGORY_TRANSLATIONS[cat]?.kn || cat;
+    if (language === "hi") return CATEGORY_TRANSLATIONS[cat]?.hi || cat;
+    return cat;
+  };
+
+  const translateDepartment = (dept: string) => {
+    if (language === "kn") return DEPARTMENT_TRANSLATIONS[dept]?.kn || dept;
+    if (language === "hi") return DEPARTMENT_TRANSLATIONS[dept]?.hi || dept;
+    return dept;
+  };
 
   const getCategoryIcon = (cat: string) => {
     if (cat.includes("Water")) return Droplets;
@@ -146,33 +180,70 @@ function ServicesContent() {
         <div className="max-w-3xl space-y-2">
           <div className="flex items-center gap-2 text-teal-200 text-xs font-bold uppercase tracking-wider">
             <Layers className="w-4 h-4" />
-            <span>Lakshmeshwar Town Municipal Council • Citizen Services Directory</span>
+            <span>
+              {language === "kn"
+                ? "ಲಕ್ಷ್ಮೇಶ್ವರ ಪುರಸಭೆ • ನಾಗರಿಕ ಸೇವೆಗಳ ವಿವರಣೆ"
+                : language === "hi"
+                ? "लक्ष्मेश्वर नगर पालिका परिषद • नागरिक सेवा निर्देशिका"
+                : "Lakshmeshwar Town Municipal Council • Citizen Services Directory"}
+            </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-            Municipal Citizen Services & Utilities
+            {language === "kn"
+              ? "ಪುರಸಭೆಯ ನಾಗರಿಕ ಸೇವೆಗಳು ಮತ್ತು ಸೌಲಭ್ಯಗಳು"
+              : language === "hi"
+              ? "नगर पालिका नागरिक सेवाएं एवं सुविधाएं"
+              : "Municipal Citizen Services & Utilities"}
           </h1>
           <p className="text-xs sm:text-sm text-teal-100/90 leading-relaxed">
-            Access transparent municipal procedures, statutory turnaround times (SLA), eligibility guidelines, document checklists, and application links for all municipal utilities in Lakshmeshwar.
+            {language === "kn"
+              ? "ಲಕ್ಷ್ಮೇಶ್ವರ ಪುರಸಭೆಯ ಎಲ್ಲಾ ಸಾರ್ವಜನಿಕ ಸೇವೆಗಳು, ಶಾಸನಬದ್ಧ ಕಾಲಮಿತಿ (SLA), ಅರ್ಹತಾ ಮಾನದಂಡಗಳು, ಅಗತ್ಯ ದಾಖಲೆಗಳು ಮತ್ತು ಅರ್ಜಿ ಸಲ್ಲಿಕೆ ಕೊಂಡಿಗಳನ್ನು ಇಲ್ಲಿ ಸುಲಭವಾಗಿ ಪಡೆಯಿರಿ."
+              : language === "hi"
+              ? "लक्ष्मेश्वर में सभी नगर पालिका सेवाओं, वैधानिक समय सीमा (SLA), पात्रता दिशानिर्देशों, आवश्यक दस्तावेजों और ऑनलाइन आवेदन की पूरी जानकारी।"
+              : "Access transparent municipal procedures, statutory turnaround times (SLA), eligibility guidelines, document checklists, and application links for all municipal utilities in Lakshmeshwar."}
           </p>
         </div>
 
         {/* Quick Access Badges */}
         <div className="mt-5 pt-4 border-t border-teal-600/40 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div>
-            <span className="text-teal-200 block text-[11px]">Catalog Services</span>
-            <strong className="text-base text-white font-bold">{filteredServices.length} Public Services</strong>
+            <span className="text-teal-200 block text-[11px]">
+              {language === "kn" ? "ಸೇವೆಗಳ ವಿವರ" : language === "hi" ? "सेवाएं सूची" : "Catalog Services"}
+            </span>
+            <strong className="text-base text-white font-bold">
+              {filteredServices.length}{" "}
+              {language === "kn"
+                ? "ಸಾರ್ವಜನಿಕ ಸೇವೆಗಳು"
+                : language === "hi"
+                ? "सार्वजनिक सेवाएं"
+                : "Public Services"}
+            </strong>
           </div>
           <div>
-            <span className="text-teal-200 block text-[11px]">Online Tracking</span>
-            <strong className="text-base text-white font-bold">Real-Time SLA</strong>
+            <span className="text-teal-200 block text-[11px]">
+              {language === "kn" ? "ಆನ್‌ಲೈನ್ ಟ್ರ್ಯಾಕಿಂಗ್" : language === "hi" ? "ऑनलाइन ट्रैकिंग" : "Online Tracking"}
+            </span>
+            <strong className="text-base text-white font-bold">
+              {language === "kn" ? "ನೈಜ-ಸಮಯದ SLA" : language === "hi" ? "रियल-टाइम SLA" : "Real-Time SLA"}
+            </strong>
           </div>
           <div>
-            <span className="text-teal-200 block text-[11px]">Emergency Hotline</span>
-            <strong className="text-base text-white font-bold">24x7 Desk (08378-220034)</strong>
+            <span className="text-teal-200 block text-[11px]">
+              {language === "kn" ? "ತುರ್ತು ಸಹಾಯವಾಣಿ" : language === "hi" ? "आपातकालीन हेल्पलाइन" : "Emergency Hotline"}
+            </span>
+            <strong className="text-base text-white font-bold">24x7 (08378-220034)</strong>
           </div>
           <div>
-            <span className="text-teal-200 block text-[11px]">Service Center</span>
-            <strong className="text-base text-white font-bold">TMC Janaseva Counter</strong>
+            <span className="text-teal-200 block text-[11px]">
+              {language === "kn" ? "ಸೇವಾ ಕೇಂದ್ರ" : language === "hi" ? "सेवा केंद्र" : "Service Center"}
+            </span>
+            <strong className="text-base text-white font-bold">
+              {language === "kn"
+                ? "ಟಿಎಂಸಿ ಜನಸೇವಾ ಕೌಂಟರ್"
+                : language === "hi"
+                ? "टीएमसी जनसेवा काउंटर"
+                : "TMC Janaseva Counter"}
+            </strong>
           </div>
         </div>
       </div>
@@ -182,21 +253,26 @@ function ServicesContent() {
         <div className="flex items-center gap-2.5 text-amber-900 dark:text-amber-200 font-semibold">
           <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
           <span>
-            Facing an urgent civic breakdown like burst drinking water pipe, fallen tree, or clogged drainage?
+            {language === "kn"
+              ? "ಕುಡಿಯುವ ನೀರಿನ ಪೈಪ್ ಒಡೆದಿರುವುದು, ರಸ್ತೆಗೆ ಮರ ಬಿದ್ದಿರುವುದು ಅಥವಾ ಒಳಚರಂಡಿ ಉಕ್ಕಿ ಹರಿಯುವಂತಹ ತುರ್ತು ಸಮಸ್ಯೆಗಳಿವೆಯೇ?"
+              : language === "hi"
+              ? "क्या पेयजल पाइप फटने, पेड़ गिरने या सीवर चोक जैसी किसी गंभीर नागरिक आपात स्थिति का सामना कर रहे हैं?"
+              : "Facing an urgent civic breakdown like burst drinking water pipe, fallen tree, or clogged drainage?"}
           </span>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-center flex-shrink-0">
           <Link
             href="/complaints/new"
+            prefetch={true}
             className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition"
           >
-            Lodge Urgent Grievance
+            {language === "kn" ? "ತುರ್ತು ದೂರು ದಾಖಲಿಸಿ" : language === "hi" ? "आपातकालीन शिकायत दर्ज करें" : "Lodge Urgent Grievance"}
           </Link>
           <a
             href="tel:08378220034"
             className="px-3 py-1.5 border border-amber-300 dark:border-amber-700 bg-white dark:bg-gray-800 text-amber-900 dark:text-amber-200 font-bold rounded-lg hover:bg-amber-100 transition"
           >
-            Call 08378-220034
+            {language === "kn" ? "ಕರೆ ಮಾಡಿ: 08378-220034" : language === "hi" ? "कॉल करें: 08378-220034" : "Call 08378-220034"}
           </a>
         </div>
       </div>
@@ -211,7 +287,13 @@ function ServicesContent() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search service name, procedure, department, or required documents..."
+              placeholder={
+                language === "kn"
+                  ? "ಸೇವೆಯ ಹೆಸರು, ಇಲಾಖೆ ಅಥವಾ ಅಗತ್ಯ ದಾಖಲೆಗಳನ್ನು ಹುಡುಕಿ..."
+                  : language === "hi"
+                  ? "सेवा का नाम, विभाग या आवश्यक दस्तावेज खोजें..."
+                  : "Search service name, procedure, department, or required documents..."
+              }
               className="w-full pl-9 pr-12 py-2.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#064E4A]"
             />
             <div className="absolute right-2 top-1/2 -translate-y-1/2">
@@ -230,10 +312,12 @@ function ServicesContent() {
               onChange={(e) => setActiveCategory(e.target.value)}
               className="w-full px-3 py-2.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#064E4A]"
             >
-              <option value="ALL">All Categories</option>
+              <option value="ALL">
+                {language === "kn" ? "ಎಲ್ಲಾ ವರ್ಗಗಳು" : language === "hi" ? "सभी श्रेणियां" : "All Categories"}
+              </option>
               {SERVICE_CATEGORIES.map((cat) => (
                 <option key={cat} value={cat}>
-                  {cat}
+                  {translateCategory(cat)}
                 </option>
               ))}
             </select>
@@ -246,10 +330,12 @@ function ServicesContent() {
               onChange={(e) => setSelectedDepartment(e.target.value)}
               className="w-full px-3 py-2.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#064E4A]"
             >
-              <option value="ALL">All Departments</option>
+              <option value="ALL">
+                {language === "kn" ? "ಎಲ್ಲಾ ಇಲಾಖೆಗಳು" : language === "hi" ? "सभी विभाग" : "All Departments"}
+              </option>
               {SERVICE_DEPARTMENTS.map((dept) => (
                 <option key={dept} value={dept}>
-                  {dept}
+                  {translateDepartment(dept)}
                 </option>
               ))}
             </select>
@@ -259,7 +345,8 @@ function ServicesContent() {
         {/* Quick Category Filter Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
           <span className="text-gray-400 text-[11px] font-semibold flex items-center gap-1 flex-shrink-0 mr-1">
-            <Filter className="w-3 h-3" /> Quick filters:
+            <Filter className="w-3 h-3" />{" "}
+            {language === "kn" ? "ತ್ವರಿತ ಫಿಲ್ಟರ್‌ಗಳು:" : language === "hi" ? "त्वरित फ़िल्टर:" : "Quick filters:"}
           </span>
           <button
             onClick={() => setActiveCategory("ALL")}
@@ -269,7 +356,7 @@ function ServicesContent() {
                 : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200"
             }`}
           >
-            All Services
+            {language === "kn" ? "ಎಲ್ಲಾ ಸೇವೆಗಳು" : language === "hi" ? "सभी सेवाएं" : "All Services"}
           </button>
           {SERVICE_CATEGORIES.map((cat) => (
             <button
@@ -281,7 +368,7 @@ function ServicesContent() {
                   : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200"
               }`}
             >
-              {cat}
+              {translateCategory(cat)}
             </button>
           ))}
         </div>
@@ -291,7 +378,13 @@ function ServicesContent() {
       {loading ? (
         <div className="py-16 text-center space-y-3">
           <RefreshCw className="w-8 h-8 text-[#064E4A] dark:text-teal-400 animate-spin mx-auto" />
-          <p className="text-sm text-gray-500 dark:text-gray-400">Loading citizen services catalog...</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {language === "kn"
+              ? "ನಾಗರಿಕ ಸೇವೆಗಳ ಪಟ್ಟಿಯನ್ನು ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ..."
+              : language === "hi"
+              ? "नागरिक सेवाएं लोड की जा रही हैं..."
+              : "Loading citizen services catalog..."}
+          </p>
         </div>
       ) : filteredServices.length === 0 ? (
         <div className="bg-white dark:bg-[#071d1b] border border-gray-200 dark:border-gray-800 rounded-2xl p-10 text-center space-y-4">
@@ -299,10 +392,18 @@ function ServicesContent() {
             <Layers className="w-6 h-6" />
           </div>
           <h3 className="font-bold text-gray-800 dark:text-gray-200 text-base">
-            No citizen services found matching your criteria
+            {language === "kn"
+              ? "ನಿಮ್ಮ ಹುಡುಕಾಟಕ್ಕೆ ಯಾವುದೇ ನಾಗರಿಕ ಸೇವೆಗಳು ಕಂಡುಬಂದಿಲ್ಲ"
+              : language === "hi"
+              ? "आपकी खोज के अनुसार कोई नागरिक सेवा नहीं मिली"
+              : "No citizen services found matching your criteria"}
           </h3>
           <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto">
-            Try adjusting your search query or choosing another service category.
+            {language === "kn"
+              ? "ದಯವಿಟ್ಟು ಬೇರೆ ಹುಡುಕು ಪದಗಳನ್ನು ಅಥವಾ ಬೇರೆ ವರ್ಗವನ್ನು ಆಯ್ಕೆಮಾಡಿ ಪ್ರಯತ್ನಿಸಿ."
+              : language === "hi"
+              ? "कृपया दूसरा शब्द खोजें या अन्य सेवा श्रेणी चुनें।"
+              : "Try adjusting your search query or choosing another service category."}
           </p>
           <div className="pt-2">
             <button
@@ -313,7 +414,7 @@ function ServicesContent() {
               }}
               className="px-4 py-2 bg-[#064E4A] hover:bg-[#0B6B63] text-white rounded-lg text-xs font-semibold transition"
             >
-              Reset Filters
+              {language === "kn" ? "ಫಿಲ್ಟರ್ ಮರುಹೊಂದಿಸಿ" : language === "hi" ? "फ़िल्टर रीसेट करें" : "Reset Filters"}
             </button>
           </div>
         </div>
@@ -322,6 +423,22 @@ function ServicesContent() {
           {filteredServices.map((service) => {
             const Icon = getCategoryIcon(service.category);
             const theme = getCategoryTheme(service.category);
+
+            const localized =
+              language === "kn"
+                ? SERVICES_TRANSLATIONS[service.id]?.kn
+                : language === "hi"
+                ? SERVICES_TRANSLATIONS[service.id]?.hi
+                : null;
+
+            const serviceName = localized?.name || service.name;
+            const serviceCat = localized?.category || translateCategory(service.category);
+            const serviceDept = localized?.department || translateDepartment(service.department);
+            const serviceDesc = localized?.description || service.description;
+            const serviceTimeline = localized?.expectedTimeline || service.expectedTimeline;
+            const serviceFee = localized?.fee || service.fee || (language === "kn" ? "ಉಚಿತ" : language === "hi" ? "निःशुल्क" : "Free of Cost");
+            const serviceElig = localized?.eligibility || service.eligibility;
+            const docCount = localized?.requiredDocuments?.length ?? service.requiredDocuments.length;
 
             return (
               <div
@@ -334,11 +451,11 @@ function ServicesContent() {
                     <span
                       className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${theme.badge}`}
                     >
-                      {service.category}
+                      {serviceCat}
                     </span>
                     <span className="flex items-center gap-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
-                      <Clock className="w-3.5 h-3.5 text-teal-600" />
-                      {service.expectedTimeline}
+                      <Clock className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      <span>{serviceTimeline}</span>
                     </span>
                   </div>
 
@@ -349,29 +466,33 @@ function ServicesContent() {
                     </div>
                     <div>
                       <h3 className="font-extrabold text-base text-gray-900 dark:text-gray-100 group-hover:text-[#064E4A] dark:group-hover:text-teal-300 transition leading-snug">
-                        {service.name}
+                        {serviceName}
                       </h3>
                       <span className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5">
-                        <Building className="w-3 h-3 text-teal-600" />
-                        <span className="truncate max-w-[200px]">{service.department}</span>
+                        <Building className="w-3 h-3 text-teal-600 shrink-0" />
+                        <span className="truncate max-w-[200px]">{serviceDept}</span>
                       </span>
                     </div>
                   </div>
 
                   {/* Description */}
                   <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-3 leading-relaxed">
-                    {service.description}
+                    {serviceDesc}
                   </p>
 
                   {/* Fee & Eligibility Snippet */}
                   <div className="p-3 bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800 rounded-xl space-y-1.5 text-xs">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-gray-400 font-semibold">Statutory Fee:</span>
-                      <strong className="text-gray-800 dark:text-gray-200">{service.fee || "Free of Cost"}</strong>
+                      <span className="text-gray-400 font-semibold">
+                        {language === "kn" ? "ಶಾಸನಬದ್ಧ ಶುಲ್ಕ:" : language === "hi" ? "वैधानिक शुल्क:" : "Statutory Fee:"}
+                      </span>
+                      <strong className="text-gray-800 dark:text-gray-200">{serviceFee}</strong>
                     </div>
                     <div className="text-[11px] text-gray-600 dark:text-gray-300 line-clamp-2">
-                      <span className="text-gray-400 font-semibold mr-1">Eligibility:</span>
-                      {service.eligibility}
+                      <span className="text-gray-400 font-semibold mr-1">
+                        {language === "kn" ? "ಅರ್ಹತೆ:" : language === "hi" ? "पात्रता:" : "Eligibility:"}
+                      </span>
+                      {serviceElig}
                     </div>
                   </div>
                 </div>
@@ -380,17 +501,29 @@ function ServicesContent() {
                 <div className="pt-3 border-t border-gray-100 dark:border-gray-800 space-y-3">
                   <div className="flex items-center justify-between text-xs text-gray-500">
                     <span className="flex items-center gap-1 text-[11px]">
-                      <FileCheck2 className="w-3.5 h-3.5 text-teal-600" />
-                      <strong>{service.requiredDocuments.length}</strong> required documents
+                      <FileCheck2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      <strong>{docCount}</strong>{" "}
+                      {language === "kn"
+                        ? "ಅಗತ್ಯ ದಾಖಲೆಗಳು"
+                        : language === "hi"
+                        ? "आवश्यक दस्तावेज"
+                        : "required documents"}
                     </span>
                     <span className="text-[10px] font-mono text-gray-400">{service.id}</span>
                   </div>
 
                   <Link
                     href={`/services/${service.id}`}
+                    prefetch={true}
                     className="w-full py-2.5 px-4 bg-gray-50 hover:bg-[#064E4A] hover:text-white dark:bg-gray-800/80 dark:hover:bg-[#064E4A] text-gray-800 dark:text-gray-200 text-xs font-bold rounded-xl transition flex items-center justify-center gap-2 group-hover:bg-[#064E4A] group-hover:text-white shadow-sm"
                   >
-                    <span>View Guidelines & How to Apply</span>
+                    <span>
+                      {language === "kn"
+                        ? "ಮಾರ್ಗಸೂಚಿ ಮತ್ತು ಅರ್ಜಿ ವಿವರ"
+                        : language === "hi"
+                        ? "दिशानिर्देश एवं आवेदन प्रक्रिया"
+                        : "View Guidelines & How to Apply"}
+                    </span>
                     <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
                   </Link>
                 </div>
