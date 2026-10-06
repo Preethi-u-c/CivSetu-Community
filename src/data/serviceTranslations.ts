@@ -298,3 +298,70 @@ export const DEPARTMENT_TRANSLATIONS: Record<
   "Public Grievance Redressal Cell": { kn: "ಸಾರ್ವಜನಿಕ ಕುಂದುಕೊರತೆ ನಿವಾರಣಾ ಕೋಶ", hi: "सार्वजनिक शिकायत निवारण प्रकोष्ठ" },
   "Disaster Management & Control Room": { kn: "ವಿಪತ್ತು ನಿರ್ವಹಣೆ ಮತ್ತು ನಿಯಂತ್ರಣ ಕೊಠಡಿ", hi: "आपदा प्रबंधन एवं नियंत्रण कक्ष" },
 };
+
+export function getServiceTranslation(
+  identifier: { id?: string; name?: string; category?: string },
+  lang: string
+): ServiceTranslationItem | null {
+  if (lang !== "kn" && lang !== "hi") return null;
+
+  // 1. Direct ID lookup
+  if (identifier.id && SERVICES_TRANSLATIONS[identifier.id]) {
+    return SERVICES_TRANSLATIONS[identifier.id][lang as "kn" | "hi"];
+  }
+
+  // 2. Case-insensitive / trimmed ID lookup
+  if (identifier.id) {
+    const cleanId = identifier.id.trim().toUpperCase();
+    for (const key of Object.keys(SERVICES_TRANSLATIONS)) {
+      if (key.toUpperCase() === cleanId) {
+        return SERVICES_TRANSLATIONS[key][lang as "kn" | "hi"];
+      }
+    }
+  }
+
+  // 3. Match by name or category heuristic
+  if (identifier.name) {
+    const nameLow = identifier.name.toLowerCase();
+    if (nameLow.includes("water") || nameLow.includes("piped")) {
+      return SERVICES_TRANSLATIONS["SRV-LMC-WAT-001"][lang as "kn" | "hi"];
+    }
+    if (nameLow.includes("sewer") || nameLow.includes("sanitation") || nameLow.includes("drainage")) {
+      return SERVICES_TRANSLATIONS["SRV-LMC-SAN-002"][lang as "kn" | "hi"];
+    }
+    if (nameLow.includes("khata") || nameLow.includes("swathu") || nameLow.includes("property")) {
+      return SERVICES_TRANSLATIONS["SRV-LMC-PROP-003"][lang as "kn" | "hi"];
+    }
+    if (nameLow.includes("birth") || nameLow.includes("death")) {
+      return SERVICES_TRANSLATIONS["SRV-LMC-REG-004"][lang as "kn" | "hi"];
+    }
+    if (nameLow.includes("trade") || nameLow.includes("license") || nameLow.includes("commercial")) {
+      return SERVICES_TRANSLATIONS["SRV-LMC-CERT-005"][lang as "kn" | "hi"];
+    }
+    if (nameLow.includes("hall") || nameLow.includes("community") || nameLow.includes("ground")) {
+      return SERVICES_TRANSLATIONS["SRV-LMC-APP-006"][lang as "kn" | "hi"];
+    }
+    if (nameLow.includes("grievance") || nameLow.includes("complaint")) {
+      return SERVICES_TRANSLATIONS["SRV-LMC-GRV-007"][lang as "kn" | "hi"];
+    }
+    if (nameLow.includes("disaster") || nameLow.includes("emergency") || nameLow.includes("control")) {
+      return SERVICES_TRANSLATIONS["SRV-LMC-EMG-008"][lang as "kn" | "hi"];
+    }
+  }
+
+  // 4. Match by category
+  if (identifier.category) {
+    const catLow = identifier.category.toLowerCase();
+    if (catLow.includes("water")) return SERVICES_TRANSLATIONS["SRV-LMC-WAT-001"][lang as "kn" | "hi"];
+    if (catLow.includes("sanitation")) return SERVICES_TRANSLATIONS["SRV-LMC-SAN-002"][lang as "kn" | "hi"];
+    if (catLow.includes("property")) return SERVICES_TRANSLATIONS["SRV-LMC-PROP-003"][lang as "kn" | "hi"];
+    if (catLow.includes("birth")) return SERVICES_TRANSLATIONS["SRV-LMC-REG-004"][lang as "kn" | "hi"];
+    if (catLow.includes("certificate")) return SERVICES_TRANSLATIONS["SRV-LMC-CERT-005"][lang as "kn" | "hi"];
+    if (catLow.includes("application")) return SERVICES_TRANSLATIONS["SRV-LMC-APP-006"][lang as "kn" | "hi"];
+    if (catLow.includes("grievance")) return SERVICES_TRANSLATIONS["SRV-LMC-GRV-007"][lang as "kn" | "hi"];
+    if (catLow.includes("emergency")) return SERVICES_TRANSLATIONS["SRV-LMC-EMG-008"][lang as "kn" | "hi"];
+  }
+
+  return null;
+}
+

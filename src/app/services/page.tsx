@@ -38,6 +38,7 @@ import {
   SERVICES_TRANSLATIONS,
   CATEGORY_TRANSLATIONS,
   DEPARTMENT_TRANSLATIONS,
+  getServiceTranslation,
 } from "@/data/serviceTranslations";
 
 function ServicesContent() {
@@ -81,12 +82,7 @@ function ServicesContent() {
       if (selectedDepartment !== "ALL" && s.department !== selectedDepartment) return false;
       if (search.trim()) {
         const q = search.trim().toLowerCase();
-        const localized =
-          language === "kn"
-            ? SERVICES_TRANSLATIONS[s.id]?.kn
-            : language === "hi"
-            ? SERVICES_TRANSLATIONS[s.id]?.hi
-            : null;
+        const localized = getServiceTranslation(s, language);
 
         const nameStr = `${s.name} ${localized?.name || ""}`.toLowerCase();
         const descStr = `${s.description} ${localized?.description || ""}`.toLowerCase();
@@ -424,12 +420,7 @@ function ServicesContent() {
             const Icon = getCategoryIcon(service.category);
             const theme = getCategoryTheme(service.category);
 
-            const localized =
-              language === "kn"
-                ? SERVICES_TRANSLATIONS[service.id]?.kn
-                : language === "hi"
-                ? SERVICES_TRANSLATIONS[service.id]?.hi
-                : null;
+            const localized = getServiceTranslation(service, language);
 
             const serviceName = localized?.name || service.name;
             const serviceCat = localized?.category || translateCategory(service.category);

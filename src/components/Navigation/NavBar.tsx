@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Info, PhoneCall, User, UserPlus, LogOut, Menu, X, Bell, Newspaper, CalendarDays, Landmark, Briefcase, Sparkles } from "lucide-react";
+import { Home, Info, PhoneCall, User, UserPlus, LogOut, Menu, X, Bell, Newspaper, CalendarDays, Landmark, Briefcase, Sparkles, Languages } from "lucide-react";
 import { useAccessibility } from "@/context/AccessibilityContext";
 import { useAuth } from "@/context/AuthContext";
 import { NotificationBell } from "./NotificationBell";
@@ -134,8 +134,49 @@ export const NavBar: React.FC = () => {
           </button>
         </div>
 
-        {/* Right Side: Authenticated Citizen Dropdown / Logout OR Register & Login */}
-        <div className="flex items-center gap-2.5">
+        {/* Right Side: Desktop Language Selector + Citizen Actions */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Desktop Language Selector */}
+          <div className="hidden lg:flex items-center gap-1 bg-gray-100 dark:bg-gray-800/80 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
+            <Languages className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 ml-1 mr-0.5" />
+            <button
+              type="button"
+              onClick={() => setLanguage("en")}
+              className={`px-2 py-1 text-xs font-bold rounded-md transition ${
+                language === "en"
+                  ? "bg-[#064E4A] text-white shadow-xs"
+                  : "text-gray-700 dark:text-gray-300 hover:text-[#064E4A] dark:hover:text-teal-300"
+              }`}
+              title="English"
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setLanguage("kn")}
+              className={`px-2 py-1 text-xs font-bold rounded-md transition font-kannada ${
+                language === "kn"
+                  ? "bg-[#064E4A] text-white shadow-xs"
+                  : "text-gray-700 dark:text-gray-300 hover:text-[#064E4A] dark:hover:text-teal-300"
+              }`}
+              title="ಕನ್ನಡ (Kannada)"
+            >
+              ಕನ್ನಡ
+            </button>
+            <button
+              type="button"
+              onClick={() => setLanguage("hi")}
+              className={`px-2 py-1 text-xs font-bold rounded-md transition font-hindi ${
+                language === "hi"
+                  ? "bg-[#064E4A] text-white shadow-xs"
+                  : "text-gray-700 dark:text-gray-300 hover:text-[#064E4A] dark:hover:text-teal-300"
+              }`}
+              title="हिंदी (Hindi)"
+            >
+              हिंदी
+            </button>
+          </div>
+
           {currentUser ? (
             <div className="flex items-center gap-2">
               <NotificationBell citizenId={currentUser.id} />

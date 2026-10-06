@@ -37,6 +37,7 @@ import {
   SERVICES_TRANSLATIONS,
   CATEGORY_TRANSLATIONS,
   DEPARTMENT_TRANSLATIONS,
+  getServiceTranslation,
 } from "@/data/serviceTranslations";
 
 export default function ServiceDetailPage() {
@@ -132,12 +133,7 @@ export default function ServiceDetailPage() {
   }
 
   const Icon = getCategoryIcon(service.category);
-  const localized =
-    language === "kn"
-      ? SERVICES_TRANSLATIONS[service.id]?.kn
-      : language === "hi"
-      ? SERVICES_TRANSLATIONS[service.id]?.hi
-      : null;
+  const localized = getServiceTranslation(service, language);
 
   const translateCategory = (cat: string) => {
     if (language === "kn") return CATEGORY_TRANSLATIONS[cat]?.kn || cat;
