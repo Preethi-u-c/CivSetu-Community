@@ -52,11 +52,20 @@ export function generateSchemeId(): string {
   return `SCH-LMC-${year}-${hex}`;
 }
 
+let cachedPublicSchemes: GovernmentScheme[] | null = null;
+let cacheExpiry = 0;
+
+export function invalidateSchemesCache(): void {
+  cachedPublicSchemes = null;
+  cacheExpiry = 0;
+}
+
 export const schemesDb = {
   /**
    * Creates a new government scheme
    */
   async create(params: CreateSchemeParams): Promise<GovernmentScheme> {
+    invalidateSchemesCache();
     await ensurePostgresTables();
     const pool = getPool();
 
@@ -169,13 +178,30 @@ export const schemesDb = {
   },
 
   /**
-   * Public list of active government schemes
+   * Public list of active government schemes with 60-second in-memory caching
    */
   async listPublic(options: SchemeFilterOptions = {}): Promise<GovernmentScheme[]> {
+    const isUnfiltered =
+      (!options.category || options.category === "ALL") &&
+      (!options.department || options.department === "ALL") &&
+      (!options.search || !options.search.trim()) &&
+      (!options.offset || options.offset === 0);
+
+    const now = Date.now();
+    if (isUnfiltered && cachedPublicSchemes && now < cacheExpiry) {
+      return cachedPublicSchemes;
+    }
+
     const res = await this.list({
       ...options,
       status: "Active",
     });
+
+    if (isUnfiltered) {
+      cachedPublicSchemes = res.schemes;
+      cacheExpiry = now + 60000;
+    }
+
     return res.schemes;
   },
 
@@ -194,6 +220,7 @@ export const schemesDb = {
    * Updates an existing scheme
    */
   async update(id: string, updates: UpdateSchemeParams): Promise<GovernmentScheme> {
+    invalidateSchemesCache();
     await ensurePostgresTables();
     const pool = getPool();
 
@@ -277,6 +304,7 @@ export const schemesDb = {
    * Deletes a scheme
    */
   async delete(id: string): Promise<boolean> {
+    invalidateSchemesCache();
     await ensurePostgresTables();
     const pool = getPool();
     const res = await pool.query("DELETE FROM government_schemes WHERE id = $1;", [id.trim()]);

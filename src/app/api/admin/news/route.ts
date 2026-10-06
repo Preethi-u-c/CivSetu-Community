@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminService } from "@/lib/services/adminService";
 import { isPostgresConfigured } from "@/lib/db/postgres";
 import { newsDb, CreateNewsArticleParams } from "@/lib/db/news";
+import { notificationService } from "@/lib/services/notificationService";
 
 export const dynamic = "force-dynamic";
 
@@ -139,6 +140,18 @@ export async function POST(req: NextRequest) {
     };
 
     const createdArticle = await newsDb.create(createParams);
+
+    if (createdArticle.isPublished) {
+      notificationService.notifyNewsPublished({
+        id: createdArticle.id,
+        headline: createdArticle.headline,
+        summary: createdArticle.summary,
+        category: createdArticle.category,
+        wardRelevance: createdArticle.wardRelevance,
+        authorName: createdArticle.authorName,
+        imageUrl: createdArticle.imageUrl,
+      }).catch((err) => console.error("Failed to dispatch news notification:", err));
+    }
 
     return NextResponse.json(
       {

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
@@ -48,6 +48,9 @@ interface ResultData {
   assignedAuthority?: string;
   authorityLevel?: string;
   photoUrl?: string | null;
+  resolutionPhotoUrl?: string | null;
+  resolutionLatitude?: number | null;
+  resolutionLongitude?: number | null;
   latitude?: number | null;
   longitude?: number | null;
   createdAt: string;
@@ -265,6 +268,9 @@ function TrackContent() {
             assignedAuthority: cmp.assignedAuthority,
             authorityLevel: cmp.authorityLevel,
             photoUrl: cmp.photoUrl,
+            resolutionPhotoUrl: cmp.resolutionPhotoUrl,
+            resolutionLatitude: cmp.resolutionLatitude,
+            resolutionLongitude: cmp.resolutionLongitude,
             latitude: cmp.latitude,
             longitude: cmp.longitude,
             createdAt: cmp.createdAt,
@@ -388,6 +394,9 @@ function TrackContent() {
               assignedAuthority: cmp.assignedAuthority,
               authorityLevel: cmp.authorityLevel,
               photoUrl: cmp.photoUrl,
+            resolutionPhotoUrl: cmp.resolutionPhotoUrl,
+            resolutionLatitude: cmp.resolutionLatitude,
+            resolutionLongitude: cmp.resolutionLongitude,
               latitude: cmp.latitude,
               longitude: cmp.longitude,
               createdAt: cmp.createdAt,
@@ -574,7 +583,7 @@ function TrackContent() {
             <span className="font-mono font-semibold text-gray-700 dark:text-gray-300">
               CMP-LMC-2026-XXXXX
             </span>
-            <span>•</span>
+            <span>â€¢</span>
             <button
               type="button"
               onClick={() => {
@@ -585,7 +594,7 @@ function TrackContent() {
             >
               LMC-GRV-2026-1001
             </button>
-            <span>•</span>
+            <span>â€¢</span>
             <button
               type="button"
               onClick={() => {
@@ -670,7 +679,7 @@ function TrackContent() {
                           <span>Resolution Progress & SLA Lifecycle</span>
                         </span>
                         <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">
-                          Step {Math.min(currentStageIndex + 1, 5)} of 5 • {SLA_STAGES[currentStageIndex]?.label || "Submitted"}
+                          Step {Math.min(currentStageIndex + 1, 5)} of 5 â€¢ {SLA_STAGES[currentStageIndex]?.label || "Submitted"}
                         </span>
                       </div>
 
@@ -914,6 +923,29 @@ function TrackContent() {
                   <p className="pl-5 leading-relaxed">{result.officialRemarks}</p>
                 </div>
               )}
+
+              {/* Authority Resolution Verification Photo (Requirement 9) */}
+              {result.resolutionPhotoUrl && (
+                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 text-xs sm:text-sm space-y-2">
+                  <div className="flex items-center justify-between font-bold text-emerald-800 dark:text-emerald-300">
+                    <span className="flex items-center gap-1.5">
+                      ✓ Resolution Verification Photo (Official Field Evidence)
+                    </span>
+                    {result.resolutionLatitude && result.resolutionLongitude && (
+                      <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 rounded">
+                        GPS: {result.resolutionLatitude.toFixed(4)}, {result.resolutionLongitude.toFixed(4)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="inline-block p-1 bg-white dark:bg-gray-800 rounded-xl border border-emerald-200 dark:border-emerald-800 shadow-xs">
+                    <img
+                      src={result.resolutionPhotoUrl}
+                      alt="Authority resolution verification"
+                      className="max-h-56 rounded-lg object-contain"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Interactive Timeline & Audit Trail */}
@@ -1038,7 +1070,7 @@ function TrackContent() {
                                   )}
                                 </div>
                                 <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                                  {tier.authority} • <span className="font-medium">{tier.officer}</span>
+                                  {tier.authority} â€¢ <span className="font-medium">{tier.officer}</span>
                                 </p>
                                 <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
                                   {tier.description}

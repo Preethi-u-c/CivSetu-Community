@@ -459,6 +459,149 @@ export const adminAuthoritiesDb = {
     );
     return (res.rowCount ?? 0) > 0;
   },
+
+  async createAuthority(data: {
+    fullName: string;
+    designation: string;
+    department: string;
+    authorityLevel: string;
+    email: string;
+    mobileNumber?: string;
+    password?: string;
+  }): Promise<SafeAuthorityUser> {
+    await ensurePostgresTables();
+    const pool = getPool();
+    const bcrypt = await import("bcryptjs");
+
+    const hash = await bcrypt.hash(data.password || "CivSetu@123", 10);
+    const id = `OFF-LMC-${Math.floor(100 + Math.random() * 900)}`;
+
+    const sql = `
+      INSERT INTO authority_users (id, full_name, designation, department, authority_level, email, mobile_number, password_hash, is_active, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      RETURNING *;
+    `;
+    const res = await pool.query(sql, [
+      id,
+      data.fullName.trim(),
+      data.designation.trim(),
+      data.department.trim(),
+      data.authorityLevel.trim(),
+      data.email.trim(),
+      data.mobileNumber?.trim() || null,
+      hash,
+    ]);
+
+    const r = res.rows[0];
+    return {
+      id: r.id,
+      fullName: r.full_name,
+      designation: r.designation,
+      department: r.department,
+      authorityLevel: r.authority_level as "Local Authority" | "Block level" | "District Panchayat" | "District Administration",
+      email: r.email,
+      mobileNumber: r.mobile_number || undefined,
+      isActive: r.is_active,
+      createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+    };
+  },
+
+  async updateAuthority(
+    id: string,
+    data: {
+      fullName?: string;
+      designation?: string;
+      department?: string;
+      authorityLevel?: string;
+      email?: string;
+      mobileNumber?: string;
+      password?: string;
+      isActive?: boolean;
+    }
+  ): Promise<SafeAuthorityUser | null> {
+    await ensurePostgresTables();
+    const pool = getPool();
+
+    const updates: string[] = ["updated_at = CURRENT_TIMESTAMP"];
+    const params: unknown[] = [id.trim()];
+    let pIdx = 2;
+
+    if (data.fullName !== undefined) {
+      updates.push(`full_name = $${pIdx++}`);
+      params.push(data.fullName.trim());
+    }
+    if (data.designation !== undefined) {
+      updates.push(`designation = $${pIdx++}`);
+      params.push(data.designation.trim());
+    }
+    if (data.department !== undefined) {
+      updates.push(`department = $${pIdx++}`);
+      params.push(data.department.trim());
+    }
+    if (data.authorityLevel !== undefined) {
+      updates.push(`authority_level = $${pIdx++}`);
+      params.push(data.authorityLevel.trim());
+    }
+    if (data.email !== undefined) {
+      updates.push(`email = $${pIdx++}`);
+      params.push(data.email.trim());
+    }
+    if (data.mobileNumber !== undefined) {
+      updates.push(`mobile_number = $${pIdx++}`);
+      params.push(data.mobileNumber.trim());
+    }
+    if (data.isActive !== undefined) {
+      updates.push(`is_active = $${pIdx++}`);
+      params.push(Boolean(data.isActive));
+    }
+    if (data.password) {
+      const bcrypt = await import("bcryptjs");
+      const hash = await bcrypt.hash(data.password, 10);
+      updates.push(`password_hash = $${pIdx++}`);
+      params.push(hash);
+    }
+
+    if (updates.length === 1) {
+       const fetch = await pool.query("SELECT * FROM authority_users WHERE id = $1", [id.trim()]);
+       if (fetch.rows.length === 0) return null;
+       const r = fetch.rows[0];
+       return {
+         id: r.id,
+         fullName: r.full_name,
+         designation: r.designation,
+         department: r.department,
+         authorityLevel: r.authority_level as "Local Authority" | "Block level" | "District Panchayat" | "District Administration",
+         email: r.email,
+         mobileNumber: r.mobile_number || undefined,
+         isActive: r.is_active,
+         createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+       };
+    }
+
+    const sql = `UPDATE authority_users SET ${updates.join(", ")} WHERE id = $1 RETURNING *;`;
+    const res = await pool.query(sql, params);
+    if (res.rows.length === 0) return null;
+    const r = res.rows[0];
+    return {
+      id: r.id,
+      fullName: r.full_name,
+      designation: r.designation,
+      department: r.department,
+      authorityLevel: r.authority_level as "Local Authority" | "Block level" | "District Panchayat" | "District Administration",
+      email: r.email,
+      mobileNumber: r.mobile_number || undefined,
+      isActive: r.is_active,
+      createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at),
+    };
+  },
+
+  async deleteAuthority(id: string): Promise<boolean> {
+    await ensurePostgresTables();
+    const pool = getPool();
+    await pool.query("DELETE FROM authority_sessions WHERE authority_id = $1", [id.trim()]);
+    const res = await pool.query("DELETE FROM authority_users WHERE id = $1", [id.trim()]);
+    return (res.rowCount ?? 0) > 0;
+  },
 };
 
 export const adminCategoriesDb = {

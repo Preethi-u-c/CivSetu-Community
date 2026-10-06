@@ -55,6 +55,8 @@ import {
   generateComplaintSuggestions,
   ComplaintAssistantResponse,
 } from "@/lib/ai/complaint-assistant";
+import { VoiceInputButton } from "@/components/Voice/VoiceInputButton";
+import { useTranslation } from "@/context/AccessibilityContext";
 
 // =============================================================================
 // Complaint Category Definitions & Metadata
@@ -259,6 +261,7 @@ const PRIORITIES: PriorityMeta[] = [
 export default function NewComplaintPage() {
   const router = useRouter();
   const { citizen, loading: authLoading, isAuthenticated } = useAuth();
+  const { t, language } = useTranslation();
 
   // Wizard Step: 1 = Form, 2 = Review, 3 = Confirmation
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
@@ -283,6 +286,8 @@ export default function NewComplaintPage() {
   const [mapPickerOpen, setMapPickerOpen] = useState<boolean>(false);
   const [selectedLandmarkName, setSelectedLandmarkName] = useState<string | null>(null);
   const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [locationPrivacyModalOpen, setLocationPrivacyModalOpen] = useState<boolean>(false);
+  const [locationPrivacyMode, setLocationPrivacyMode] = useState<"fuzzed" | "precise" | "ward_only">("fuzzed");
 
   // Photo Attachment State
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -415,8 +420,15 @@ export default function NewComplaintPage() {
     }
   };
 
-  // GPS / Geolocation Capture (Real Browser Geolocation with actual accuracy & graceful error handling)
+  // Trigger Location Permission & Privacy Explanation Modal before device sensor query
   const handleCaptureLocation = () => {
+    setLocationError(null);
+    setLocationPrivacyModalOpen(true);
+  };
+
+  // GPS / Geolocation Capture (Real Browser Geolocation with Privacy Preservation Modes)
+  const executeCaptureLocation = (mode: "fuzzed" | "precise") => {
+    setLocationPrivacyModalOpen(false);
     setIsLocating(true);
     setLocationError(null);
     setLocationStatus("Querying device GPS sensors...");
@@ -424,19 +436,36 @@ export default function NewComplaintPage() {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const lat = parseFloat(pos.coords.latitude.toFixed(6));
-          const lng = parseFloat(pos.coords.longitude.toFixed(6));
-          const acc = Math.round(pos.coords.accuracy); // Actual browser-reported accuracy!
+          let lat = pos.coords.latitude;
+          let lng = pos.coords.longitude;
+          const rawAcc = Math.round(pos.coords.accuracy);
+
+          if (mode === "fuzzed") {
+            // Neighborhood-level precision (~100m, 3 decimal places) to preserve domestic privacy
+            lat = parseFloat(lat.toFixed(3));
+            lng = parseFloat(lng.toFixed(3));
+            setLocationAccuracy(Math.max(rawAcc, 100));
+            setLocationPrivacyMode("fuzzed");
+            setLocationStatus(
+              `Privacy Mode (~100m): ${lat.toFixed(3)}°N, ${lng.toFixed(3)}°E (Domestic Privacy Protected)`
+            );
+          } else {
+            // Precise Pinpoint (6 decimals) for infrastructure issues
+            lat = parseFloat(lat.toFixed(6));
+            lng = parseFloat(lng.toFixed(6));
+            setLocationAccuracy(rawAcc);
+            setLocationPrivacyMode("precise");
+            setLocationStatus(
+              `GPS Tagged: ${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E (±${rawAcc}m actual sensor accuracy)`
+            );
+          }
+
           setLatitude(lat);
           setLongitude(lng);
-          setLocationAccuracy(acc);
           setLocationCaptured(true);
           setLocationMethod("gps");
           setIsLocating(false);
           setLocationError(null);
-          setLocationStatus(
-            `Coordinates tagged: ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E (±${acc}m actual accuracy)`
-          );
         },
         (err) => {
           setIsLocating(false);
@@ -451,7 +480,7 @@ export default function NewComplaintPage() {
           setLocationError(errorMsg);
           setLocationStatus(null);
         },
-        { timeout: 10000, enableHighAccuracy: true, maximumAge: 60000 }
+        { timeout: 10000, enableHighAccuracy: mode === "precise", maximumAge: 60000 }
       );
     } else {
       setIsLocating(false);
@@ -510,6 +539,9 @@ export default function NewComplaintPage() {
     setLocationCaptured(true);
     setLocationMethod("map");
     setLocationError(null);
+    if ("privacyMode" in data && data.privacyMode) {
+      setLocationPrivacyMode(data.privacyMode);
+    }
 
     // 1. Resolve and synchronize Ward Jurisdiction to canonical "Ward XX" format
     const targetWardCode = normalizeWardValue(
@@ -832,6 +864,7 @@ export default function NewComplaintPage() {
         address: address.trim(),
         latitude: latitude,
         longitude: longitude,
+        privacyMode: locationPrivacyMode,
         photoUrl: photoPreview || null,
         priority: priority,
       };
@@ -1459,7 +1492,7 @@ export default function NewComplaintPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-bold text-xs sm:text-sm text-gray-900 dark:text-gray-100">
-                            {cat.name}
+                            {(t.complaintCategories as any)?.[cat.id] || cat.name}
                           </p>
                           <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
                             {cat.description}
@@ -1523,7 +1556,14 @@ export default function NewComplaintPage() {
                   <label htmlFor="complaint-title" className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
                     3. Complaint Subject / Title <span className="text-red-500">*</span>
                   </label>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <VoiceInputButton
+                      size="sm"
+                      onTranscript={(spokenText) => {
+                        setTitle((prev) => (prev ? `${prev} ${spokenText}` : spokenText));
+                      }}
+                      ariaLabel="Dictate complaint title using microphone"
+                    />
                     {/* AI Assistant Button */}
                     <button
                       type="button"
@@ -1581,9 +1621,18 @@ export default function NewComplaintPage() {
                   <label htmlFor="complaint-desc" className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
                     4. Detailed Grievance Description <span className="text-red-500">*</span>
                   </label>
-                  <span className="text-[11px] text-gray-400">
-                    {description.length} characters (min 10)
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <VoiceInputButton
+                      size="sm"
+                      onTranscript={(spokenText) => {
+                        setDescription((prev) => (prev ? `${prev} ${spokenText}` : spokenText));
+                      }}
+                      ariaLabel="Dictate detailed grievance description"
+                    />
+                    <span className="text-[11px] text-gray-400">
+                      {description.length} characters (min 10)
+                    </span>
+                  </div>
                 </div>
 
                 <textarea
@@ -1816,6 +1865,17 @@ export default function NewComplaintPage() {
                             <span className="px-2 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200 text-[10px] font-bold">
                               {locationMethod === "map" ? "Map Tagged" : "GPS Tagged"}
                             </span>
+                            {locationPrivacyMode === "fuzzed" ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/80 text-[#064E4A] dark:text-teal-300 text-[10px] font-bold">
+                                <ShieldCheck className="w-3 h-3 text-teal-600 dark:text-teal-400" />
+                                <span>Neighborhood Privacy (~100m)</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/80 text-blue-800 dark:text-blue-300 text-[10px] font-bold">
+                                <Crosshair className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                                <span>Precise Infrastructure Mode</span>
+                              </span>
+                            )}
                           </div>
 
                           <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5">
@@ -1887,15 +1947,69 @@ export default function NewComplaintPage() {
               {/* Section 7: Photographic Evidence Upload */}
               <div id="field-photo" className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label htmlFor="complaint-photo-input" className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
-                    7. Photographic Evidence (Optional, max 5MB)
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="complaint-photo-input" className="block text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100">
+                      7. Photographic Evidence (Optional, max 5MB)
+                    </label>
+                    {latitude !== null && longitude !== null ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>📍 Location captured ✓</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 text-[10px] font-bold border border-amber-200 dark:border-amber-800">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>📍 Location required for photo upload</span>
+                      </span>
+                    )}
+                  </div>
                   <span id="photo-format-hint" className="text-[11px] text-gray-500 dark:text-gray-400">
                     JPG, PNG, WebP supported
                   </span>
                 </div>
 
-                {!photoPreview ? (
+                {latitude === null || longitude === null ? (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={handleCaptureLocation}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleCaptureLocation();
+                      }
+                    }}
+                    className="border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/40 rounded-2xl p-6 text-center cursor-pointer transition opacity-70 hover:opacity-100 group"
+                  >
+                    <div className="w-12 h-12 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto mb-3">
+                      <MapPin className="w-6 h-6" />
+                    </div>
+                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-3">
+                      📍 Please capture your GPS location first before uploading a photo. This helps verify the complaint location.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCaptureLocation();
+                      }}
+                      disabled={isLocating}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#064E4A] hover:bg-[#0B6B63] text-white text-xs font-bold rounded-lg transition shadow-sm disabled:opacity-50"
+                    >
+                      {isLocating ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Acquiring Location...</span>
+                        </>
+                      ) : (
+                        <>
+                          <MapPin className="w-4 h-4" />
+                          <span>Get My Location</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : !photoPreview ? (
                   <div
                     tabIndex={0}
                     role="button"
@@ -2031,7 +2145,7 @@ export default function NewComplaintPage() {
                   href="/dashboard"
                   className="w-full sm:w-auto px-5 py-2.5 text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-center transition"
                 >
-                  Cancel & Return to Dashboard
+                  {t.buttons?.cancel || "Cancel & Return to Dashboard"}
                 </Link>
 
                 <div className="w-full sm:w-auto flex items-center gap-3">
@@ -2039,7 +2153,7 @@ export default function NewComplaintPage() {
                     type="submit"
                     className="w-full sm:w-auto px-7 py-3 bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold text-sm rounded-xl transition shadow hover:shadow-md flex items-center justify-center gap-2"
                   >
-                    <span>Review Complaint</span>
+                    <span>{t.buttons?.proceed || "Proceed to Verification"}</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -2406,6 +2520,136 @@ export default function NewComplaintPage() {
           </div>
         )}
       </div>
+
+      {/* Location Permission & Privacy Explanation Modal */}
+      {locationPrivacyModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="location-privacy-modal-title"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/65 backdrop-blur-sm animate-fadeIn"
+        >
+          <div className="bg-white dark:bg-[#071f1d] border border-gray-200 dark:border-gray-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            {/* Modal Header */}
+            <div className="bg-[#064E4A] text-white p-4 sm:p-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5 text-teal-300" />
+                </div>
+                <div>
+                  <h3 id="location-privacy-modal-title" className="text-base sm:text-lg font-bold text-white">
+                    Location Access & Privacy Notice
+                  </h3>
+                  <p className="text-xs text-teal-100">
+                    Lakshmeshwar Town Municipal Council (TMC)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLocationPrivacyModalOpen(false)}
+                aria-label="Close location privacy notice"
+                className="p-1.5 rounded-lg text-teal-200 hover:text-white hover:bg-white/10 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto text-xs text-gray-700 dark:text-gray-300">
+              <div className="p-3 bg-teal-50 dark:bg-teal-950/40 rounded-xl border border-teal-200 dark:border-teal-800 text-teal-900 dark:text-teal-200 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-[#064E4A] dark:text-teal-400" />
+                  <span>Why does CivSetu request your location?</span>
+                </p>
+                <p className="text-[11px] text-teal-800 dark:text-teal-300 leading-relaxed">
+                  Coordinates enable municipal ward engineers, water linemen, and sanitation crews to navigate directly to the grievance spot without calling you repeatedly for directions.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-bold text-xs uppercase tracking-wide text-gray-800 dark:text-gray-200">
+                  Citizen Privacy Commitments:
+                </h4>
+                <ul className="space-y-1.5 text-[11px] list-disc list-inside text-gray-600 dark:text-gray-400">
+                  <li><strong className="text-gray-800 dark:text-gray-200">No Continuous Tracking:</strong> Sensor queried once upon your explicit action. Never tracked 24/7.</li>
+                  <li><strong className="text-gray-800 dark:text-gray-200">Domestic Privacy Protection:</strong> We recommend <em>Neighborhood Precision (~100m)</em> for homes, preventing storage of exact private room coordinates.</li>
+                  <li><strong className="text-gray-800 dark:text-gray-200">Municipal Scope Only:</strong> Used solely for Lakshmeshwar municipal grievance resolution.</li>
+                </ul>
+              </div>
+
+              {/* Selection Options */}
+              <div className="space-y-2.5 pt-1">
+                <h4 className="font-bold text-xs text-gray-900 dark:text-white">
+                  Choose your preferred geotagging mode:
+                </h4>
+
+                {/* Option 1: Neighborhood Fuzzed (Recommended) */}
+                <button
+                  type="button"
+                  onClick={() => executeCaptureLocation("fuzzed")}
+                  className="w-full text-left p-3 rounded-xl border border-teal-400 bg-teal-50/70 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/60 transition group space-y-1"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-[#064E4A] dark:text-teal-200 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Neighborhood Privacy Mode (~100m)</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                      Recommended for Homes
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-600 dark:text-gray-400">
+                    Fuzzes coordinates to your street block (~100m). Crews reach the vicinity without storing exact household GPS.
+                  </p>
+                </button>
+
+                {/* Option 2: Precise Infrastructure Pin */}
+                <button
+                  type="button"
+                  onClick={() => executeCaptureLocation("precise")}
+                  className="w-full text-left p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-teal-400 transition group space-y-1"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-gray-900 dark:text-white flex items-center gap-1.5">
+                      <Crosshair className="w-4 h-4 text-blue-600" />
+                      <span>Precise Infrastructure Mode (High Precision)</span>
+                    </span>
+                    <span className="text-[10px] font-semibold text-gray-500">
+                      For Public Assets
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Captures exact meter-level GPS. Best for potholes, broken streetlights, or water pipeline leaks on public roads.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3.5 bg-gray-50 dark:bg-gray-900/60 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setLocationPrivacyModalOpen(false);
+                  setMapPickerOpen(true);
+                }}
+                className="text-xs font-semibold text-[#064E4A] dark:text-teal-300 hover:underline"
+              >
+                Pick from Municipal Map Instead
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setLocationPrivacyModalOpen(false)}
+                className="px-4 py-1.5 rounded-lg border border-gray-300 dark:border-gray-700 text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Municipal Map Picker Modal (Self-contained, offline-capable, no Google API keys) */}
       <MunicipalMapPickerModal

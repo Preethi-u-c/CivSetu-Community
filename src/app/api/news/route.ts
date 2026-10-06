@@ -33,11 +33,18 @@ export async function GET(req: NextRequest) {
       offset,
     });
 
-    return NextResponse.json({
-      success: true,
-      count: articles.length,
-      data: articles,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        count: articles.length,
+        data: articles,
+      },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120",
+        },
+      }
+    );
   } catch (error) {
     console.error("Error in GET /api/news:", error);
     return NextResponse.json(

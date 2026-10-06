@@ -12,6 +12,7 @@ tsconfig.tsbuildinfo
 .env
 .env*.local
 .env.local
+passwords.txt
 
 # Local / Test Data Storage
 data/storage/civsetu-db.json

@@ -144,28 +144,37 @@ export async function POST(req: NextRequest) {
       sanitizedPriority = priority as ComplaintPriority;
     }
 
-    // 6. Coordinates Validation (optional)
+    // 6. Coordinates Validation & Privacy-Preserving Sanitization (optional)
+    const { privacyMode } = body;
     let parsedLat: number | null = null;
     let parsedLng: number | null = null;
-    if (latitude !== undefined && latitude !== null && latitude !== "") {
-      const lat = Number(latitude);
-      if (isNaN(lat) || lat < -90 || lat > 90) {
-        return NextResponse.json(
-          { success: false, error: "Invalid latitude coordinate value." },
-          { status: 400 }
-        );
+
+    if (privacyMode === "ward_only") {
+      // Citizen opted out of geographic coordinates completely
+      parsedLat = null;
+      parsedLng = null;
+    } else {
+      if (latitude !== undefined && latitude !== null && latitude !== "") {
+        const lat = Number(latitude);
+        if (isNaN(lat) || lat < -90 || lat > 90) {
+          return NextResponse.json(
+            { success: false, error: "Invalid latitude coordinate value." },
+            { status: 400 }
+          );
+        }
+        // If neighborhood privacy mode is chosen, fuzz to ~100m (3 decimal places) to preserve domestic privacy
+        parsedLat = privacyMode === "fuzzed" ? parseFloat(lat.toFixed(3)) : parseFloat(lat.toFixed(6));
       }
-      parsedLat = lat;
-    }
-    if (longitude !== undefined && longitude !== null && longitude !== "") {
-      const lng = Number(longitude);
-      if (isNaN(lng) || lng < -180 || lng > 180) {
-        return NextResponse.json(
-          { success: false, error: "Invalid longitude coordinate value." },
-          { status: 400 }
-        );
+      if (longitude !== undefined && longitude !== null && longitude !== "") {
+        const lng = Number(longitude);
+        if (isNaN(lng) || lng < -180 || lng > 180) {
+          return NextResponse.json(
+            { success: false, error: "Invalid longitude coordinate value." },
+            { status: 400 }
+          );
+        }
+        parsedLng = privacyMode === "fuzzed" ? parseFloat(lng.toFixed(3)) : parseFloat(lng.toFixed(6));
       }
-      parsedLng = lng;
     }
 
     // 7. Residential Address fallback
@@ -186,12 +195,23 @@ export async function POST(req: NextRequest) {
       priority: sanitizedPriority,
     });
 
-    // Notify authority desk of new complaint registration
+    // Notify authority desk of new complaint registration & dispatch email + SSE broadcast
     await notificationService.notifyComplaintRegistered(
       complaint.id,
       complaint.category,
       complaint.ward,
-      citizen.id
+      citizen.id,
+      {
+        title: complaint.title,
+        description: complaint.description,
+        deadline: complaint.deadline,
+        fullComplaint: {
+          ...complaint,
+          citizenName: citizen.fullName,
+          citizenMobile: citizen.mobileNumber,
+          citizenEmail: citizen.email,
+        },
+      }
     );
 
     return NextResponse.json(

@@ -41,10 +41,13 @@ import {
   FileText,
   Bookmark,
   Share2,
+  Newspaper,
 } from "lucide-react";
 import { ComplaintRecord, ComplaintTimelineEvent } from "@/lib/db/complaints";
 import { SafeAuthorityUser, DepartmentOption } from "@/lib/db/authority";
 import { NoticeRecord } from "@/lib/db/notices";
+import { useIdleTimeout } from "@/hooks/useIdleTimeout";
+import { IdleTimeoutWarning } from "@/components/UI/IdleTimeoutWarning";
 
 export default function AuthorityDashboardPage() {
   // 1. Authentication & Officer State
@@ -53,7 +56,7 @@ export default function AuthorityDashboardPage() {
 
   // 2. Navigation State
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "complaints" | "assigned" | "escalated" | "nearDeadline" | "resolved" | "announcements" | "notifications" | "profile"
+    "dashboard" | "complaints" | "assigned" | "escalated" | "nearDeadline" | "resolved" | "announcements" | "news" | "notifications" | "profile"
   >("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -93,6 +96,9 @@ export default function AuthorityDashboardPage() {
   // 6. Action Form States
   const [remarkInput, setRemarkInput] = useState("");
   const [resolutionInput, setResolutionInput] = useState("");
+  const [resolutionPhoto, setResolutionPhoto] = useState<string | null>(null);
+  const [resolutionGps, setResolutionGps] = useState<{ lat: number; lng: number } | null>(null);
+  const [isCapturingGps, setIsCapturingGps] = useState(false);
   const [escalationReason, setEscalationReason] = useState("");
   const [assignDept, setAssignDept] = useState("");
   const [newStatus, setNewStatus] = useState("");
@@ -107,6 +113,19 @@ export default function AuthorityDashboardPage() {
   const [noticeCategoryFilter, setNoticeCategoryFilter] = useState("ALL");
   const [isCreateNoticeOpen, setIsCreateNoticeOpen] = useState(false);
   const [noticeActionLoading, setNoticeActionLoading] = useState(false);
+
+  // Authority Local News State (Requirement 3)
+  const [authorityNews, setAuthorityNews] = useState<any[]>([]);
+  const [newsLoading, setNewsLoading] = useState(false);
+  const [newsSearch, setNewsSearch] = useState("");
+  const [isCreateNewsOpen, setIsCreateNewsOpen] = useState(false);
+  const [newsHeadline, setNewsHeadline] = useState("");
+  const [newsSummary, setNewsSummary] = useState("");
+  const [newsArticle, setNewsArticle] = useState("");
+  const [newsCategory, setNewsCategory] = useState("Civic Development");
+  const [newsWard, setNewsWard] = useState("All Wards");
+  const [newsImageUrl, setNewsImageUrl] = useState("");
+  const [newsSubmitting, setNewsSubmitting] = useState(false);
   const [noticeActionMsg, setNoticeActionMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Notice Creation Form State
@@ -127,6 +146,16 @@ export default function AuthorityDashboardPage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [unreadOnlyFilter, setUnreadOnlyFilter] = useState(false);
+
+  // 9. Real-time Live SSE Sync State
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const [liveAlert, setLiveAlert] = useState<{
+    id: string;
+    type: "complaint_created" | "complaint_updated" | "complaint_resolved" | "notice_published";
+    title: string;
+    message: string;
+    complaintId?: string;
+  } | null>(null);
 
   // =========================================================================
   // API LOADERS
@@ -300,6 +329,7 @@ export default function AuthorityDashboardPage() {
       loadComplaints();
     } else if (activeTab === "announcements") {
       loadNotices();
+      loadAuthorityNews();
     } else if (activeTab === "notifications") {
       loadNotifications();
     }
@@ -309,6 +339,7 @@ export default function AuthorityDashboardPage() {
   const handleGlobalRefresh = () => {
     if (activeTab === "announcements") {
       loadNotices();
+      loadAuthorityNews();
     } else if (activeTab === "notifications") {
       loadNotifications();
     } else {
@@ -318,8 +349,204 @@ export default function AuthorityDashboardPage() {
   };
 
   // =========================================================================
-  // COMPLAINT ACTIONS & INSPECTION
+  // REAL-TIME SERVER-SENT EVENTS (SSE) LISTENER
+  // Dynamically receives new complaints, status updates, and gazette notices
+  // without requiring manual page reload or polling.
   // =========================================================================
+  useEffect(() => {
+    if (!officer) return;
+
+    let eventSource: EventSource | null = null;
+    let retryTimer: NodeJS.Timeout | null = null;
+
+    function connectSSE() {
+      try {
+        eventSource = new EventSource("/api/realtime/complaints");
+
+        eventSource.onopen = () => {
+          setRealtimeConnected(true);
+        };
+
+        // 1. Live New Complaint Received
+        eventSource.addEventListener("complaint_created", (event: MessageEvent) => {
+          try {
+            const newComplaint = JSON.parse(event.data);
+            if (newComplaint && newComplaint.id) {
+              setComplaints((prev) => {
+                if (prev.some((c) => c.id === newComplaint.id)) return prev;
+                return [newComplaint, ...prev];
+              });
+              setStats((prev) => ({
+                ...prev,
+                total: prev.total + 1,
+                submitted: prev.submitted + 1,
+              }));
+              setLiveAlert({
+                id: String(Date.now()),
+                type: "complaint_created",
+                title: "New Grievance Registered",
+                message: `#${newComplaint.id} â€¢ ${newComplaint.category} (${newComplaint.ward})`,
+                complaintId: newComplaint.id,
+              });
+              loadUnreadCount();
+            }
+          } catch (e) {
+            console.error("Error processing real-time complaint_created:", e);
+          }
+        });
+
+        // 2. Live Complaint Status / Assignment / Escalation Update
+        eventSource.addEventListener("complaint_updated", (event: MessageEvent) => {
+          try {
+            const updateData = JSON.parse(event.data);
+            if (updateData && updateData.complaintId) {
+              setComplaints((prev) =>
+                prev.map((c) => {
+                  if (c.id === updateData.complaintId) {
+                    return {
+                      ...c,
+                      status: updateData.status || c.status,
+                      assignedAuthority: updateData.assignedAuthority || c.assignedAuthority,
+                      authorityLevel: updateData.authorityLevel || c.authorityLevel,
+                      updatedAt: updateData.timestamp || new Date().toISOString(),
+                    };
+                  }
+                  return c;
+                })
+              );
+
+              setSelectedComplaint((curr) => {
+                if (curr && curr.id === updateData.complaintId) {
+                  return {
+                    ...curr,
+                    status: updateData.status || curr.status,
+                    assignedAuthority: updateData.assignedAuthority || curr.assignedAuthority,
+                    authorityLevel: updateData.authorityLevel || curr.authorityLevel,
+                    updatedAt: updateData.timestamp || new Date().toISOString(),
+                  };
+                }
+                return curr;
+              });
+
+              setLiveAlert({
+                id: String(Date.now()),
+                type: "complaint_updated",
+                title: `Complaint Updated: ${updateData.status || "Progressed"}`,
+                message: `#${updateData.complaintId} â€¢ ${updateData.note || "Ticket state refreshed"}`,
+                complaintId: updateData.complaintId,
+              });
+              loadUnreadCount();
+            }
+          } catch (e) {
+            console.error("Error processing real-time complaint_updated:", e);
+          }
+        });
+
+        // 3. Live Complaint Resolved
+        eventSource.addEventListener("complaint_resolved", (event: MessageEvent) => {
+          try {
+            const resolveData = JSON.parse(event.data);
+            if (resolveData && resolveData.complaintId) {
+              setComplaints((prev) =>
+                prev.map((c) => {
+                  if (c.id === resolveData.complaintId) {
+                    return {
+                      ...c,
+                      status: "Resolved",
+                      resolutionNotes: resolveData.resolutionNotes || c.resolutionNotes,
+                      resolvedAt: resolveData.resolvedAt || new Date().toISOString(),
+                    };
+                  }
+                  return c;
+                })
+              );
+
+              setSelectedComplaint((curr) => {
+                if (curr && curr.id === resolveData.complaintId) {
+                  return {
+                    ...curr,
+                    status: "Resolved",
+                    resolutionNotes: resolveData.resolutionNotes || curr.resolutionNotes,
+                    resolvedAt: resolveData.resolvedAt || new Date().toISOString(),
+                  };
+                }
+                return curr;
+              });
+
+              setLiveAlert({
+                id: String(Date.now()),
+                type: "complaint_resolved",
+                title: "Grievance Redressed",
+                message: `#${resolveData.complaintId} marked as Resolved`,
+                complaintId: resolveData.complaintId,
+              });
+              loadUnreadCount();
+            }
+          } catch (e) {
+            console.error("Error processing real-time complaint_resolved:", e);
+          }
+        });
+
+        // 4. Live Notice / Emergency Published
+        eventSource.addEventListener("notice_published", (event: MessageEvent) => {
+          try {
+            const noticeData = JSON.parse(event.data);
+            if (noticeData) {
+              setLiveAlert({
+                id: String(Date.now()),
+                type: "notice_published",
+                title: noticeData.isEmergency ? "ðŸš¨ Emergency Broadcast" : "Municipal Notice Published",
+                message: noticeData.title,
+              });
+              loadNotices();
+      loadAuthorityNews();
+              loadUnreadCount();
+            }
+          } catch (e) {
+            console.error("Error processing real-time notice_published:", e);
+          }
+        });
+
+        eventSource.onerror = () => {
+          setRealtimeConnected(false);
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          if (!retryTimer) {
+            retryTimer = setTimeout(() => {
+              retryTimer = null;
+              connectSSE();
+            }, 5000);
+          }
+        };
+      } catch (err) {
+        console.error("SSE connection error:", err);
+        setRealtimeConnected(false);
+      }
+    }
+
+    connectSSE();
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+    };
+  }, [officer, loadUnreadCount, loadNotices]);
+
+  // Auto-dismiss live alerts after 7 seconds
+  useEffect(() => {
+    if (liveAlert) {
+      const timer = setTimeout(() => {
+        setLiveAlert(null);
+      }, 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [liveAlert]);
 
   const handleOpenDetail = async (complaint: ComplaintRecord) => {
     setSelectedComplaint(complaint);
@@ -354,6 +581,9 @@ export default function AuthorityDashboardPage() {
     note?: string;
     reason?: string;
     resolutionNotes?: string;
+    resolutionPhotoUrl?: string | null;
+    resolutionLatitude?: number | null;
+    resolutionLongitude?: number | null;
   }) => {
     if (!selectedComplaint) return;
     setActionLoading(true);
@@ -450,6 +680,7 @@ export default function AuthorityDashboardPage() {
       setNoticeExpiryDate("");
 
       loadNotices();
+      loadAuthorityNews();
       loadUnreadCount();
     } catch {
       setNoticeActionMsg({ type: "error", text: "Network error creating notice." });
@@ -469,11 +700,74 @@ export default function AuthorityDashboardPage() {
       const json = await res.json();
       if (json.success) {
         loadNotices();
+      loadAuthorityNews();
       }
     } catch (err) {
       console.error("Error updating notice status:", err);
     } finally {
       setNoticeActionLoading(false);
+    }
+  };
+
+  const loadAuthorityNews = async () => {
+    setNewsLoading(true);
+    try {
+      const res = await fetch("/api/authority/news");
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setAuthorityNews(json.data);
+      }
+    } catch (err) {
+      console.error("Error loading authority news:", err);
+    } finally {
+      setNewsLoading(false);
+    }
+  };
+
+  const handleCreateNews = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newsHeadline.trim() || !newsSummary.trim() || !newsArticle.trim()) return;
+    setNewsSubmitting(true);
+    try {
+      const res = await fetch("/api/authority/news", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          headline: newsHeadline,
+          summary: newsSummary,
+          article: newsArticle,
+          category: newsCategory,
+          wardRelevance: newsWard,
+          imageUrl: newsImageUrl.trim() || undefined,
+          isPublished: true,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setIsCreateNewsOpen(false);
+        setNewsHeadline("");
+        setNewsSummary("");
+        setNewsArticle("");
+        setNewsImageUrl("");
+        loadAuthorityNews();
+      }
+    } catch (err) {
+      console.error("Error creating news:", err);
+    } finally {
+      setNewsSubmitting(false);
+    }
+  };
+
+  const handleDeleteNews = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this news bulletin?")) return;
+    try {
+      const res = await fetch(`/api/authority/news/${encodeURIComponent(id)}`, { method: "DELETE" });
+      const json = await res.json();
+      if (json.success) {
+        loadAuthorityNews();
+      }
+    } catch (err) {
+      console.error("Error deleting news:", err);
     }
   };
 
@@ -487,6 +781,7 @@ export default function AuthorityDashboardPage() {
       const json = await res.json();
       if (json.success) {
         loadNotices();
+      loadAuthorityNews();
       }
     } catch (err) {
       console.error("Error deleting notice:", err);
@@ -528,13 +823,20 @@ export default function AuthorityDashboardPage() {
   };
 
   // Logout Handler
-  const handleLogout = async () => {
+  const handleLogout = async (reason?: string) => {
     try {
       await fetch("/api/authority/auth/logout", { method: "POST" });
     } finally {
-      window.location.href = "/authority/login";
+      window.location.href = `/authority/login${reason ? `?reason=${reason}` : ""}`;
     }
   };
+
+  const { isWarning, remainingSeconds, dismissWarning } = useIdleTimeout({
+    timeoutMinutes: 30, // Authority sessions are 30 mins idle timeout
+    warningMinutes: 2,
+    enabled: !!officer,
+    onLogout: () => handleLogout("idle"),
+  });
 
   // Clear filters
   const handleClearFilters = () => {
@@ -621,6 +923,13 @@ export default function AuthorityDashboardPage() {
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-[#031514] text-gray-900 dark:text-gray-100 flex flex-col">
+      {isWarning && (
+        <IdleTimeoutWarning
+          remainingSeconds={remainingSeconds}
+          onStayLoggedIn={dismissWarning}
+          onLogout={() => handleLogout("idle")}
+        />
+      )}
       {/* 1. TOP HEADER */}
       <header className="bg-[#064E4A] text-white sticky top-0 z-30 shadow-md border-b border-teal-800">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
@@ -655,6 +964,21 @@ export default function AuthorityDashboardPage() {
 
           {/* Right: Officer Profile Badge & Actions */}
           <div className="flex items-center gap-3">
+            {/* Live SSE Real-Time Status Indicator */}
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition ${
+                realtimeConnected
+                  ? "bg-emerald-950/80 border border-emerald-500/60 text-emerald-300"
+                  : "bg-amber-950/80 border border-amber-500/60 text-amber-300"
+              }`}
+              title={realtimeConnected ? "Real-time updates connected (SSE active)" : "Reconnecting to live event stream..."}
+            >
+              <span className={`w-2 h-2 rounded-full ${realtimeConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+              <span className="hidden md:inline">
+                {realtimeConnected ? "Live Updates Active" : "Connecting..."}
+              </span>
+            </div>
+
             <div className="hidden sm:flex flex-col text-right">
               <span className="text-xs font-bold text-white leading-tight">{officer?.fullName}</span>
               <span className="text-[11px] text-amber-300 leading-tight">{officer?.designation}</span>
@@ -671,7 +995,7 @@ export default function AuthorityDashboardPage() {
 
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={() => handleLogout()}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-700/80 hover:bg-red-700 text-white text-xs font-bold transition shadow-sm cursor-pointer"
               title="Logout from Authority Portal"
             >
@@ -681,6 +1005,57 @@ export default function AuthorityDashboardPage() {
           </div>
         </div>
       </header>
+
+      {/* Floating Real-Time Alert Notification */}
+      {liveAlert && (
+        <div className="fixed top-16 right-4 z-50 max-w-md w-full bg-white dark:bg-gray-900 border-2 border-emerald-500 rounded-xl shadow-2xl p-4 animate-in slide-in-from-top-4 duration-300">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <span className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400">
+                <Bell className="w-5 h-5 animate-bounce" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                    Real-Time Notification
+                  </span>
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                </div>
+                <h4 className="text-sm font-bold text-gray-900 dark:text-white mt-0.5">
+                  {liveAlert.title}
+                </h4>
+                <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">
+                  {liveAlert.message}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLiveAlert(null)}
+              className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {liveAlert.complaintId && (
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const found = complaints.find((c) => c.id === liveAlert.complaintId);
+                  if (found) {
+                    handleOpenDetail(found);
+                  }
+                  setLiveAlert(null);
+                }}
+                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition cursor-pointer"
+              >
+                Inspect Complaint &rarr;
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 2. BODY LAYOUT: SIDEBAR + MAIN CONTENT */}
       <div className="flex-1 max-w-[1600px] w-full mx-auto flex">
@@ -731,7 +1106,8 @@ export default function AuthorityDashboardPage() {
                 { id: "escalated", label: "Escalated Grievances", icon: ArrowUpRight, count: stats.escalated, highlight: true },
                 { id: "nearDeadline", label: "Near SLA Deadline", icon: Clock, count: stats.nearDeadline, alert: true },
                 { id: "resolved", label: "Resolved Grievances", icon: CheckCircle2, count: stats.resolved },
-                { id: "announcements", label: "Gazette & Notices", icon: Megaphone, count: noticeStats.published },
+                        { id: "announcements", label: "Gazette & Notices", icon: Megaphone, count: noticeStats.published },
+        { id: "news", label: "Local News & Bulletins", icon: Newspaper, count: authorityNews.length },
                 { id: "notifications", label: "System Alerts", icon: Bell, count: unreadCount, alertBadge: true },
                 { id: "profile", label: "Authority Profile", icon: User },
               ].map((item) => {
@@ -786,7 +1162,7 @@ export default function AuthorityDashboardPage() {
         </aside>
 
         {/* MAIN DASHBOARD CONTENT */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto">
+        <main className="flex-1 min-w-0 w-full p-3 sm:p-6 lg:p-8 space-y-6 overflow-y-auto">
           {/* =========================================================================
               MODULE 1, 2, 3, 4, 5: COMPLAINTS / QUEUE / ASSIGNED / ESCALATED / SLA / RESOLVED
               ========================================================================= */}
@@ -810,7 +1186,7 @@ export default function AuthorityDashboardPage() {
                   </h1>
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
                     {activeTab === "assigned" && `Displaying grievances assigned to: ${officer?.department}`}
-                    {activeTab === "escalated" && "Tracking complaints escalated across administrative tiers (Local Authority → Block Level → District Administration)"}
+                    {activeTab === "escalated" && "Tracking complaints escalated across administrative tiers (Local Authority â†’ Block Level â†’ District Administration)"}
                     {activeTab === "nearDeadline" && "Distinguishing On Track, Near Deadline (<24h), and Overdue statutory SLAs"}
                     {activeTab === "resolved" && "Officially resolved and closed complaints with recorded resolution notes and timeline audit trails"}
                     {(activeTab === "dashboard" || activeTab === "complaints") && "Real-time citizen grievance tracking, workflow assignment, and escalation hierarchy"}
@@ -1107,7 +1483,7 @@ export default function AuthorityDashboardPage() {
                                 </td>
                                 <td className="py-3 px-4 whitespace-nowrap">
                                   <p className="font-semibold text-gray-800 dark:text-gray-200">{c.citizenName || "Complainant"}</p>
-                                  <p className="text-[11px] text-gray-500">{c.citizenMobile || "—"}</p>
+                                  <p className="text-[11px] text-gray-500">{c.citizenMobile || "â€”"}</p>
                                 </td>
                                 <td className="py-3 px-4 whitespace-nowrap">
                                   <p className="font-bold text-gray-800 dark:text-gray-300">{c.ward}</p>
@@ -1226,9 +1602,9 @@ export default function AuthorityDashboardPage() {
                             <p className="font-bold text-sm text-gray-900 dark:text-white leading-snug">{c.title}</p>
                             <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
                               <span className="font-semibold text-gray-800 dark:text-gray-200">{c.ward}</span>
-                              <span>•</span>
+                              <span>â€¢</span>
                               <span>{c.category}</span>
-                              <span>•</span>
+                              <span>â€¢</span>
                               <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${sla.badgeClass}`}>
                                 {sla.label}
                               </span>
@@ -1448,11 +1824,11 @@ export default function AuthorityDashboardPage() {
 
                       <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 pt-2 border-t border-gray-100 dark:border-gray-800">
                         <span>Category: <strong className="text-gray-700 dark:text-gray-300">{n.category}</strong></span>
-                        <span>•</span>
+                        <span>â€¢</span>
                         <span>Scope: <strong className="text-gray-700 dark:text-gray-300">{n.targetScope} {n.targetWards ? `(${n.targetWards})` : ""}</strong></span>
-                        <span>•</span>
+                        <span>â€¢</span>
                         <span>Priority: <strong className="text-gray-700 dark:text-gray-300">{n.priority}</strong></span>
-                        <span>•</span>
+                        <span>â€¢</span>
                         <span>Issued by: <strong className="text-gray-700 dark:text-gray-300">{n.issuedByName}</strong></span>
                       </div>
                     </div>
@@ -1681,6 +2057,191 @@ export default function AuthorityDashboardPage() {
                           className="px-4 py-2 bg-[#064E4A] hover:bg-[#0B6B63] text-white font-bold rounded-xl disabled:opacity-50"
                         >
                           {noticeActionLoading ? "Saving Notice..." : noticeStatus === "Published" ? "Publish Gazette Notice" : "Save Notice Draft"}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+                    {/* =========================================================================
+              MODULE 6B: LOCAL NEWS & WARD BULLETINS (Requirement 3)
+              ========================================================================= */}
+          {activeTab === "news" && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-gray-200 dark:border-gray-800">
+                <div>
+                  <h1 className="text-xl font-bold text-[#064E4A] dark:text-teal-300 flex items-center gap-2">
+                    <Newspaper className="w-5 h-5 text-amber-500" />
+                    <span>Municipal News Bulletins & Ward Stories</span>
+                  </h1>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                    Create, publish, and manage local press updates and civic bulletins. Automatically notifies citizens upon release.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateNewsOpen(true)}
+                  className="px-4 py-2 bg-[#064E4A] hover:bg-[#08635e] text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-2 cursor-pointer w-fit"
+                >
+                  <Plus className="w-4 h-4 text-amber-400" />
+                  <span>Draft News Bulletin</span>
+                </button>
+              </div>
+
+              {/* News Grid */}
+              {newsLoading ? (
+                <div className="py-12 text-center text-xs text-gray-500">Loading civic bulletins...</div>
+              ) : authorityNews.length === 0 ? (
+                <div className="py-12 text-center text-xs text-gray-500 bg-white dark:bg-[#071f1e] rounded-2xl border border-gray-200 dark:border-teal-950">
+                  No local news bulletins published yet. Click &quot;Draft News Bulletin&quot; above to create one.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {authorityNews
+                    .filter((n) => !newsSearch || n.headline.toLowerCase().includes(newsSearch.toLowerCase()) || n.summary.toLowerCase().includes(newsSearch.toLowerCase()))
+                    .map((item) => (
+                      <div key={item.id} className="bg-white dark:bg-[#071f1e] border border-gray-200 dark:border-teal-950 rounded-2xl overflow-hidden shadow-xs flex flex-col justify-between">
+                        {item.imageUrl && (
+                          <div className="h-36 w-full overflow-hidden bg-gray-100">
+                            <img src={item.imageUrl} alt={item.headline} className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                        <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="font-bold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded">
+                                {item.category}
+                              </span>
+                              <span className="text-gray-500">{item.wardRelevance}</span>
+                            </div>
+                            <h3 className="font-bold text-sm text-gray-900 dark:text-gray-100 line-clamp-2">
+                              {item.headline}
+                            </h3>
+                            <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-3">
+                              {item.summary}
+                            </p>
+                          </div>
+                          <div className="pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-[11px] text-gray-500">
+                            <span>By {item.authorName}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteNews(item.id)}
+                              className="text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {/* Create News Modal */}
+              {isCreateNewsOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+                  <div className="bg-white dark:bg-[#062624] border border-teal-200 dark:border-teal-800 rounded-2xl max-w-xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+                    <div className="flex items-center justify-between pb-3 border-b border-gray-200 dark:border-gray-800">
+                      <h3 className="font-bold text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                        <Newspaper className="w-4 h-4 text-teal-500" />
+                        <span>Publish New Municipal Bulletin</span>
+                      </h3>
+                      <button type="button" onClick={() => setIsCreateNewsOpen(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+                    </div>
+
+                    <form onSubmit={handleCreateNews} className="space-y-3 text-xs">
+                      <div>
+                        <label className="block font-bold mb-1">Headline *</label>
+                        <input
+                          type="text"
+                          required
+                          value={newsHeadline}
+                          onChange={(e) => setNewsHeadline(e.target.value)}
+                          placeholder="e.g. Lakshmeshwar TMC Launches Drinking Water Pipeline Upgrades"
+                          className="w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-gray-800"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-bold mb-1">Category</label>
+                          <select
+                            value={newsCategory}
+                            onChange={(e) => setNewsCategory(e.target.value)}
+                            className="w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-gray-800"
+                          >
+                            <option>Civic Development</option>
+                            <option>Community & Culture</option>
+                            <option>Public Health</option>
+                            <option>Environment</option>
+                            <option>Infrastructure</option>
+                            <option>Municipal Governance</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block font-bold mb-1">Ward Relevance</label>
+                          <select
+                            value={newsWard}
+                            onChange={(e) => setNewsWard(e.target.value)}
+                            className="w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-gray-800"
+                          >
+                            <option>All Wards</option>
+                            {Array.from({ length: 23 }, (_, i) => `Ward ${i + 1}`).map((w) => (
+                              <option key={w}>{w}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block font-bold mb-1">Brief Summary *</label>
+                        <textarea
+                          required
+                          rows={2}
+                          value={newsSummary}
+                          onChange={(e) => setNewsSummary(e.target.value)}
+                          placeholder="Brief 1-2 sentence synopsis for SMS/email previews..."
+                          className="w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-gray-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold mb-1">Article Content *</label>
+                        <textarea
+                          required
+                          rows={5}
+                          value={newsArticle}
+                          onChange={(e) => setNewsArticle(e.target.value)}
+                          placeholder="Detailed official story, project specifics, contractor information..."
+                          className="w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-gray-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold mb-1">Banner Image URL (Optional)</label>
+                        <input
+                          type="url"
+                          value={newsImageUrl}
+                          onChange={(e) => setNewsImageUrl(e.target.value)}
+                          placeholder="https://..."
+                          className="w-full px-3 py-2 border rounded-xl bg-gray-50 dark:bg-gray-800"
+                        />
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-3 border-t">
+                        <button
+                          type="button"
+                          onClick={() => setIsCreateNewsOpen(false)}
+                          className="px-4 py-2 border rounded-xl font-bold"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={newsSubmitting}
+                          className="px-5 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl font-bold cursor-pointer disabled:opacity-50"
+                        >
+                          {newsSubmitting ? "Publishing & Alerting..." : "Publish Bulletin"}
                         </button>
                       </div>
                     </form>
@@ -1971,7 +2532,7 @@ export default function AuthorityDashboardPage() {
                     <span>Citizen Complainant Details</span>
                   </p>
                   <p><span className="text-gray-500">Name:</span> <span className="font-semibold">{selectedComplaint.citizenName || "Citizen Complainant"}</span></p>
-                  <p><span className="text-gray-500">Mobile:</span> <span className="font-semibold">{selectedComplaint.citizenMobile || "—"}</span></p>
+                  <p><span className="text-gray-500">Mobile:</span> <span className="font-semibold">{selectedComplaint.citizenMobile || "â€”"}</span></p>
                   <p><span className="text-gray-500">Citizen ID:</span> <span className="font-mono">{selectedComplaint.citizenId}</span></p>
                 </div>
 
@@ -2168,23 +2729,119 @@ export default function AuthorityDashboardPage() {
 
                 {/* Sub-Modal for Resolve */}
                 {activeActionModal === "resolve" && (
-                  <div className="pt-3 border-t border-teal-200 dark:border-teal-900 space-y-2">
+                  <div className="pt-3 border-t border-teal-200 dark:border-teal-900 space-y-3">
                     <label className="block text-xs font-bold text-emerald-900 dark:text-emerald-300">
                       Official Resolution Summary & Corrective Action (Mandatory, min 5 chars):
                     </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={resolutionInput}
-                        onChange={(e) => setResolutionInput(e.target.value)}
-                        placeholder="e.g. Broken valve replaced at Ward 03 pipeline. Water supply verified."
-                        className="flex-1 px-3 py-2 text-xs border border-emerald-300 dark:border-emerald-800 rounded-xl bg-white dark:bg-gray-800"
-                      />
+                    <textarea
+                      rows={2}
+                      value={resolutionInput}
+                      onChange={(e) => setResolutionInput(e.target.value)}
+                      placeholder="e.g. Broken valve replaced at Ward 03 pipeline. Water supply verified."
+                      className="w-full px-3 py-2 text-xs border border-emerald-300 dark:border-emerald-800 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    />
+
+                    {/* Verification GPS Photo (Requirement 9) */}
+                    <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-xl space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-emerald-900 dark:text-emerald-200">
+                          📷 Verification Photo & GPS (Optional, builds citizen trust):
+                        </span>
+                        {resolutionGps ? (
+                          <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                            ✓ GPS Tagged ({resolutionGps.lat.toFixed(4)}, {resolutionGps.lng.toFixed(4)})
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isCapturingGps}
+                            onClick={() => {
+                              if (!navigator.geolocation) {
+                                alert("Geolocation is not supported by your browser.");
+                                return;
+                              }
+                              setIsCapturingGps(true);
+                              navigator.geolocation.getCurrentPosition(
+                                (pos) => {
+                                  setResolutionGps({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                                  setIsCapturingGps(false);
+                                },
+                                (err) => {
+                                  alert("Could not fetch GPS location: " + err.message);
+                                  setIsCapturingGps(false);
+                                },
+                                { enableHighAccuracy: true, timeout: 10000 }
+                              );
+                            }}
+                            className="text-[11px] text-teal-700 dark:text-teal-300 underline font-bold cursor-pointer"
+                          >
+                            {isCapturingGps ? "Capturing GPS..." : "📍 Tag GPS Location"}
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (file.size > 5 * 1024 * 1024) {
+                                alert("Photo size exceeds 5MB limit.");
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = () => setResolutionPhoto(reader.result as string);
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="text-xs text-gray-600 dark:text-gray-300 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer"
+                        />
+                        {resolutionPhoto && (
+                          <button
+                            type="button"
+                            onClick={() => setResolutionPhoto(null)}
+                            className="text-red-500 hover:text-red-700 text-xs font-bold"
+                          >
+                            Remove Photo
+                          </button>
+                        )}
+                      </div>
+                      {resolutionPhoto && (
+                        <div className="w-20 h-20 rounded-lg overflow-hidden border border-emerald-400">
+                          <img src={resolutionPhoto} alt="Resolution Verification" className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveActionModal(null);
+                          setResolutionPhoto(null);
+                          setResolutionGps(null);
+                        }}
+                        className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400"
+                      >
+                        Cancel
+                      </button>
                       <button
                         type="button"
                         disabled={actionLoading || resolutionInput.trim().length < 5}
-                        onClick={() => handleExecuteAction({ action: "resolve", resolutionNotes: resolutionInput })}
-                        className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer"
+                        onClick={() => {
+                          handleExecuteAction({
+                            action: "resolve",
+                            resolutionNotes: resolutionInput,
+                            resolutionPhotoUrl: resolutionPhoto,
+                            resolutionLatitude: resolutionGps?.lat ?? null,
+                            resolutionLongitude: resolutionGps?.lng ?? null,
+                          });
+                          setResolutionPhoto(null);
+                          setResolutionGps(null);
+                        }}
+                        className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold disabled:opacity-50 cursor-pointer shadow-sm"
                       >
                         Confirm Resolution
                       </button>
@@ -2234,7 +2891,7 @@ export default function AuthorityDashboardPage() {
                       <p className="text-gray-700 dark:text-gray-300">{evt.note}</p>
                       <div className="flex items-center gap-2 text-[11px] text-gray-500 pt-0.5">
                         <span>Recorded by: <strong className="text-gray-700 dark:text-gray-400">{evt.updatedBy}</strong></span>
-                        {evt.assignedTo && <span>• Assigned: {evt.assignedTo}</span>}
+                        {evt.assignedTo && <span>â€¢ Assigned: {evt.assignedTo}</span>}
                       </div>
                     </div>
                   ))}

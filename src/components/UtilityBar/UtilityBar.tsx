@@ -87,7 +87,7 @@ export const UtilityBar: React.FC = () => {
         <div className="flex items-center flex-wrap gap-2 text-gray-300">
           <a
             href="#main-content"
-            className="hover:text-amber-400 underline underline-offset-2 transition-colors"
+            className="skip-link hover:text-amber-400 underline underline-offset-2 transition-colors"
           >
             {t.topBar.skipToMain}
           </a>
@@ -106,14 +106,15 @@ export const UtilityBar: React.FC = () => {
           </button>
           <span className="text-gray-500">|</span>
 
-          {/* Language Switcher */}
-          <div className="flex items-center gap-1.5">
+          {/* Language Switcher: English | ಕನ್ನಡ | हिंदी */}
+          <div className="flex items-center gap-1.5" role="region" aria-label={t.accessibility?.languageSelect || "Language Select"}>
             <button
               onClick={() => setLanguage("en")}
               className={`hover:text-amber-400 transition-colors ${
                 language === "en" ? "text-amber-400 font-bold underline" : "text-gray-300"
               }`}
               aria-label="English Language"
+              aria-pressed={language === "en"}
             >
               English
             </button>
@@ -124,8 +125,20 @@ export const UtilityBar: React.FC = () => {
                 language === "kn" ? "text-amber-400 font-bold underline" : "text-gray-300"
               }`}
               aria-label="ಕನ್ನಡ ಭಾಷೆ (Kannada Language)"
+              aria-pressed={language === "kn"}
             >
               ಕನ್ನಡ
+            </button>
+            <span className="text-gray-500">|</span>
+            <button
+              onClick={() => setLanguage("hi")}
+              className={`hover:text-amber-400 transition-colors font-hindi ${
+                language === "hi" ? "text-amber-400 font-bold underline" : "text-gray-300"
+              }`}
+              aria-label="हिंदी भाषा (Hindi Language)"
+              aria-pressed={language === "hi"}
+            >
+              हिंदी
             </button>
           </div>
           <span className="text-gray-500">|</span>

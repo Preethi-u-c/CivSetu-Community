@@ -4,7 +4,7 @@ import { isPostgresConfigured } from "@/lib/db/postgres";
 import { adminDb, SafeAdminUser, toSafeAdminUser } from "@/lib/db/admin";
 
 export const ADMIN_COOKIE_NAME = "civsetu_admin_token";
-export const ADMIN_SESSION_DAYS = 7;
+export const ADMIN_SESSION_HOURS = 4;
 const BCRYPT_ROUNDS = 10;
 
 export const adminService = {
@@ -65,7 +65,7 @@ export const adminService = {
       return { success: false, error: "Invalid administrative credentials." };
     }
 
-    const expiresAt = new Date(Date.now() + ADMIN_SESSION_DAYS * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + ADMIN_SESSION_HOURS * 60 * 60 * 1000);
     const sessionId = await adminDb.createSession(admin.id, expiresAt);
 
     // Set HTTP-Only Session Cookie

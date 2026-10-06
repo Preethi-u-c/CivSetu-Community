@@ -42,11 +42,20 @@ export function generateNewsId(): string {
   return `NEWS-LMC-${year}-${hex}`;
 }
 
+let cachedPublicNews: NewsArticle[] | null = null;
+let cacheExpiry = 0;
+
+export function invalidateNewsCache(): void {
+  cachedPublicNews = null;
+  cacheExpiry = 0;
+}
+
 export const newsDb = {
   /**
    * Creates a new news article in PostgreSQL
    */
   async create(params: CreateNewsArticleParams): Promise<NewsArticle> {
+    invalidateNewsCache();
     await ensurePostgresTables();
     const pool = getPool();
 
@@ -200,7 +209,7 @@ export const newsDb = {
   },
 
   /**
-   * Public list of published news articles
+   * Public list of published news articles with 60-second in-memory caching
    */
   async listPublic(
     options: {
@@ -211,10 +220,28 @@ export const newsDb = {
       offset?: number;
     } = {}
   ): Promise<NewsArticle[]> {
+    const isUnfiltered =
+      (!options.category || options.category === "ALL") &&
+      (!options.ward || options.ward === "ALL") &&
+      (!options.search || !options.search.trim()) &&
+      (!options.offset || options.offset === 0);
+
+    const now = Date.now();
+    if (isUnfiltered && cachedPublicNews && now < cacheExpiry) {
+      const lim = options.limit || 50;
+      return cachedPublicNews.slice(0, lim);
+    }
+
     const res = await this.list({
       ...options,
       isPublished: true,
     });
+
+    if (isUnfiltered) {
+      cachedPublicNews = res.articles;
+      cacheExpiry = now + 60000;
+    }
+
     return res.articles;
   },
 
@@ -244,6 +271,7 @@ export const newsDb = {
    * Updates an existing news article
    */
   async update(id: string, updates: UpdateNewsArticleParams): Promise<NewsArticle> {
+    invalidateNewsCache();
     await ensurePostgresTables();
     const pool = getPool();
 
@@ -319,6 +347,7 @@ export const newsDb = {
    * Toggles the publish state of an article (published <-> draft)
    */
   async togglePublish(id: string): Promise<NewsArticle> {
+    invalidateNewsCache();
     await ensurePostgresTables();
     const pool = getPool();
 
@@ -342,6 +371,7 @@ export const newsDb = {
    * Deletes a news article
    */
   async delete(id: string): Promise<boolean> {
+    invalidateNewsCache();
     await ensurePostgresTables();
     const pool = getPool();
     const res = await pool.query("DELETE FROM news_articles WHERE id = $1;", [id.trim()]);

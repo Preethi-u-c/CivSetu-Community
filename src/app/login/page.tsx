@@ -378,16 +378,16 @@ export default function LoginPage() {
         <div className="mt-8 p-3.5 bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 rounded-xl text-xs text-gray-600 dark:text-gray-400 text-center space-y-1.5">
           <div className="flex items-center justify-center gap-1.5 font-bold text-gray-700 dark:text-gray-300">
             <Shield className="w-4 h-4 text-[#B98519]" />
-            <span>Are you a Municipal Officer or TMC Staff?</span>
+            <span>Are you a Municipal Officer assigned to grievance redressal?</span>
           </div>
           <p className="text-[11px]">
-            Municipal employees and ward administrators can access the internal management desk.
+            Municipal employees and ward administrators can access the officer desk for complaint management.
           </p>
           <Link
-            href="/admin"
+            href="/authority/login"
             className="inline-block mt-1 font-bold text-[#064E4A] dark:text-teal-300 underline hover:text-[#0B6B63]"
           >
-            Access Officer Administrative Desk →
+            Access Officer Grievance Desk →
           </Link>
         </div>
       </div>

@@ -224,7 +224,7 @@ export const notificationDb = {
   },
 
   async listRecent(
-    options: { limit?: number; unreadOnly?: boolean; authorityId?: string } | number = 20
+    options: { limit?: number; unreadOnly?: boolean; authorityId?: string; citizenId?: string } | number = 20
   ): Promise<NotificationRecord[]> {
     await ensurePostgresTables();
     const pool = getPool();
@@ -232,6 +232,7 @@ export const notificationDb = {
     let limit = 20;
     let unreadOnly = false;
     let authorityId: string | undefined = undefined;
+    let citizenId: string | undefined = undefined;
 
     if (typeof options === "number") {
       limit = options;
@@ -239,6 +240,7 @@ export const notificationDb = {
       limit = options.limit || 20;
       unreadOnly = Boolean(options.unreadOnly);
       authorityId = options.authorityId;
+      citizenId = options.citizenId;
     }
 
     const conditions: string[] = ["1=1"];
@@ -252,6 +254,12 @@ export const notificationDb = {
     if (authorityId) {
       conditions.push(`(authority_id = $${pIdx} OR authority_id IS NULL)`);
       params.push(authorityId);
+      pIdx++;
+    }
+
+    if (citizenId) {
+      conditions.push(`citizen_id = $${pIdx}`);
+      params.push(citizenId);
       pIdx++;
     }
 
@@ -278,34 +286,68 @@ export const notificationDb = {
     }));
   },
 
-  async markAsRead(id: number): Promise<boolean> {
+  async markAsRead(id: number, citizenId?: string): Promise<boolean> {
     await ensurePostgresTables();
     const pool = getPool();
-    const res = await pool.query("UPDATE notifications SET is_read = true WHERE id = $1;", [id]);
+    let sql = "UPDATE notifications SET is_read = true WHERE id = $1";
+    const params: unknown[] = [id];
+    if (citizenId) {
+      sql += " AND citizen_id = $2";
+      params.push(citizenId);
+    }
+    const res = await pool.query(sql + ";", params);
     return (res.rowCount ?? 0) > 0;
   },
 
-  async markAllAsRead(authorityId?: string): Promise<number> {
+  async markAllAsRead(filter?: { authorityId?: string; citizenId?: string } | string): Promise<number> {
     await ensurePostgresTables();
     const pool = getPool();
     let sql = "UPDATE notifications SET is_read = true WHERE is_read = false";
     const params: unknown[] = [];
-    if (authorityId) {
-      sql += " AND (authority_id = $1 OR authority_id IS NULL)";
-      params.push(authorityId);
+    let pIdx = 1;
+
+    if (typeof filter === "string") {
+      sql += ` AND (authority_id = $${pIdx} OR authority_id IS NULL)`;
+      params.push(filter);
+      pIdx++;
+    } else if (typeof filter === "object" && filter !== null) {
+      if (filter.authorityId) {
+        sql += ` AND (authority_id = $${pIdx} OR authority_id IS NULL)`;
+        params.push(filter.authorityId);
+        pIdx++;
+      }
+      if (filter.citizenId) {
+        sql += ` AND citizen_id = $${pIdx}`;
+        params.push(filter.citizenId);
+        pIdx++;
+      }
     }
     const res = await pool.query(sql, params);
     return res.rowCount ?? 0;
   },
 
-  async getUnreadCount(authorityId?: string): Promise<number> {
+  async getUnreadCount(filter?: { authorityId?: string; citizenId?: string } | string): Promise<number> {
     await ensurePostgresTables();
     const pool = getPool();
     let sql = "SELECT COUNT(*) AS count FROM notifications WHERE is_read = false";
     const params: unknown[] = [];
-    if (authorityId) {
-      sql += " AND (authority_id = $1 OR authority_id IS NULL)";
-      params.push(authorityId);
+    let pIdx = 1;
+
+    if (typeof filter === "string") {
+      sql += ` AND (authority_id = $${pIdx} OR authority_id IS NULL)`;
+      params.push(filter);
+      pIdx++;
+    } else if (typeof filter === "object" && filter !== null) {
+      if (filter.authorityId) {
+        sql += ` AND (authority_id = $${pIdx} OR authority_id IS NULL)`;
+        params.push(filter.authorityId);
+        pIdx++;
+      }
+      if (filter.citizenId) {
+        sql += ` AND citizen_id = $${pIdx}`;
+        params.push(filter.citizenId);
+        pIdx++;
+      }
     }
     const res = await pool.query(sql, params);
     return parseInt(res.rows[0]?.count || "0", 10);

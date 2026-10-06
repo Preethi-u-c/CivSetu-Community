@@ -41,11 +41,18 @@ export async function GET(req: NextRequest) {
       offset,
     });
 
-    return NextResponse.json({
-      success: true,
-      count: notices.length,
-      data: notices,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        count: notices.length,
+        data: notices,
+      },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=15, stale-while-revalidate=60",
+        },
+      }
+    );
   } catch (error) {
     console.error("Error in GET /api/notices:", error);
     return NextResponse.json(

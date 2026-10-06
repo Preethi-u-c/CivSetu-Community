@@ -29,6 +29,7 @@ export interface ComplaintRecord {
   citizenId: string;
   citizenName?: string;
   citizenMobile?: string;
+  citizenEmail?: string;
   category: string;
   title: string;
   description: string;
@@ -43,6 +44,9 @@ export interface ComplaintRecord {
   authorityLevel: AuthorityLevel;
   deadline: string; // ISO string
   resolutionNotes?: string | null;
+  resolutionPhotoUrl?: string | null;
+  resolutionLatitude?: number | null;
+  resolutionLongitude?: number | null;
   resolvedAt?: string | null;
   closedAt?: string | null;
   reopenedReason?: string | null;
@@ -159,6 +163,7 @@ function mapComplaintRow(row: Record<string, unknown>): ComplaintRecord {
     citizenId: row.citizen_id as string,
     citizenName: (row.citizen_name as string) || undefined,
     citizenMobile: (row.citizen_mobile as string) || undefined,
+    citizenEmail: (row.citizen_email as string) || undefined,
     category: row.category as string,
     title: row.title as string,
     description: row.description as string,
@@ -173,6 +178,9 @@ function mapComplaintRow(row: Record<string, unknown>): ComplaintRecord {
     authorityLevel: row.authority_level as AuthorityLevel,
     deadline: toIso(row.deadline) || new Date().toISOString(),
     resolutionNotes: (row.resolution_notes as string) || null,
+    resolutionPhotoUrl: (row.resolution_photo_url as string) || null,
+    resolutionLatitude: row.resolution_latitude !== null && row.resolution_latitude !== undefined ? Number(row.resolution_latitude) : null,
+    resolutionLongitude: row.resolution_longitude !== null && row.resolution_longitude !== undefined ? Number(row.resolution_longitude) : null,
     resolvedAt: toIso(row.resolved_at),
     closedAt: toIso(row.closed_at),
     reopenedReason: (row.reopened_reason as string) || null,
@@ -327,7 +335,7 @@ export const complaintDb = {
     const pool = getPool();
 
     const sql = `
-      SELECT c.*, cz.full_name AS citizen_name, cz.mobile_number AS citizen_mobile
+      SELECT c.*, cz.full_name AS citizen_name, cz.mobile_number AS citizen_mobile, cz.email AS citizen_email
       FROM complaints c
       LEFT JOIN citizens cz ON c.citizen_id = cz.id
       WHERE c.id = $1
@@ -416,7 +424,7 @@ export const complaintDb = {
     const offset = Math.max(Number(options.offset) || 0, 0);
 
     const dataSql = `
-      SELECT c.*, cz.full_name AS citizen_name, cz.mobile_number AS citizen_mobile
+      SELECT c.*, cz.full_name AS citizen_name, cz.mobile_number AS citizen_mobile, cz.email AS citizen_email
       FROM complaints c
       LEFT JOIN citizens cz ON c.citizen_id = cz.id
       ${whereClause}
@@ -493,6 +501,9 @@ export const complaintDb = {
       assignedAuthority?: string;
       authorityLevel?: AuthorityLevel;
       resolutionNotes?: string;
+      resolutionPhotoUrl?: string | null;
+      resolutionLatitude?: number | null;
+      resolutionLongitude?: number | null;
       escalationReason?: string;
     }
   ): Promise<ComplaintRecord> {
@@ -529,12 +540,15 @@ export const complaintDb = {
           assigned_authority = $2,
           authority_level = $3,
           resolution_notes = COALESCE($4, resolution_notes),
+          resolution_photo_url = COALESCE($5, resolution_photo_url),
+          resolution_latitude = COALESCE($6, resolution_latitude),
+          resolution_longitude = COALESCE($7, resolution_longitude),
           resolved_at = ${resolvedAtClause},
           closed_at = ${closedAtClause},
-          escalation_reason = COALESCE($5, escalation_reason),
+          escalation_reason = COALESCE($8, escalation_reason),
           escalated_at = ${escalatedAtClause},
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = $6
+      WHERE id = $9
       RETURNING *;
     `;
 
@@ -543,6 +557,9 @@ export const complaintDb = {
       targetAuthority,
       targetLevel,
       params.resolutionNotes || null,
+      params.resolutionPhotoUrl || null,
+      params.resolutionLatitude ?? null,
+      params.resolutionLongitude ?? null,
       params.escalationReason || null,
       complaintId,
     ]);
@@ -735,7 +752,7 @@ export const complaintDb = {
     }
 
     const dataSql = `
-      SELECT c.*, cz.full_name AS citizen_name, cz.mobile_number AS citizen_mobile
+      SELECT c.*, cz.full_name AS citizen_name, cz.mobile_number AS citizen_mobile, cz.email AS citizen_email
       FROM complaints c
       LEFT JOIN citizens cz ON c.citizen_id = cz.id
       ${whereClause}

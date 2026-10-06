@@ -15,12 +15,14 @@ import {
   Loader2,
   CheckCircle2,
   ExternalLink,
+  ShieldAlert,
 } from "lucide-react";
 
 function AdminLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectParam = searchParams.get("redirect") || "/admin/dashboard";
+  const reasonParam = searchParams.get("reason");
 
   const [identifier, setIdentifier] = useState(
     process.env.NODE_ENV === "development" ? "admin" : ""
@@ -51,7 +53,11 @@ function AdminLoginContent() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.success) {
-        setError(data.error || "Authentication failed. Invalid administrator credentials.");
+        if (res.status === 429) {
+          setError(data.error || "Too many failed attempts. Account temporarily locked for security. Please try again in 15 minutes.");
+        } else {
+          setError(data.error || "Authentication failed. Invalid administrator credentials.");
+        }
         setLoading(false);
         return;
       }
@@ -119,8 +125,14 @@ function AdminLoginContent() {
 
           {/* Feedback Alerts */}
           {error && (
-            <div className="mb-5 p-3.5 rounded-xl bg-red-950/60 border border-red-700/60 text-red-200 text-xs flex items-start gap-2.5 animate-fadeIn">
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+            <div className={`mb-5 p-3.5 rounded-xl text-xs flex items-start gap-2.5 animate-fadeIn ${
+              error.includes("locked") 
+                ? "bg-amber-950/60 border border-amber-700/60 text-amber-200" 
+                : "bg-red-950/60 border border-red-700/60 text-red-200"
+            }`}>
+              <AlertCircle className={`w-4 h-4 shrink-0 mt-0.5 ${
+                error.includes("locked") ? "text-amber-400" : "text-red-400"
+              }`} />
               <span>{error}</span>
             </div>
           )}
@@ -129,6 +141,13 @@ function AdminLoginContent() {
             <div className="mb-5 p-3.5 rounded-xl bg-emerald-950/60 border border-emerald-700/60 text-emerald-200 text-xs flex items-center gap-2.5 animate-fadeIn">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>Authenticated successfully. Redirecting to workspace...</span>
+            </div>
+          )}
+
+          {reasonParam === "idle" && !error && (
+            <div className="p-3 mb-4 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-sm font-medium flex items-start gap-2 animate-in fade-in slide-in-from-top-2">
+              <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" />
+              <span>Your session expired due to inactivity. Please log in again.</span>
             </div>
           )}
 

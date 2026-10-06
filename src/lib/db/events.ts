@@ -54,11 +54,20 @@ export function generateEventId(): string {
   return `EVT-LMC-${year}-${hex}`;
 }
 
+let cachedPublicEvents: MunicipalEvent[] | null = null;
+let cacheExpiry = 0;
+
+export function invalidateEventsCache(): void {
+  cachedPublicEvents = null;
+  cacheExpiry = 0;
+}
+
 export const eventsDb = {
   /**
    * Creates a new municipal event
    */
   async create(params: CreateEventParams): Promise<MunicipalEvent> {
+    invalidateEventsCache();
     await ensurePostgresTables();
     const pool = getPool();
 
@@ -227,13 +236,32 @@ export const eventsDb = {
   },
 
   /**
-   * Public list of published events
+   * Public list of published events with 60-second in-memory caching
    */
   async listPublic(options: EventFilterOptions = {}): Promise<MunicipalEvent[]> {
+    const isUnfiltered =
+      (!options.category || options.category === "ALL") &&
+      (!options.ward || options.ward === "ALL") &&
+      (!options.search || !options.search.trim()) &&
+      (!options.timeFilter || options.timeFilter === "all") &&
+      (!options.offset || options.offset === 0);
+
+    const now = Date.now();
+    if (isUnfiltered && cachedPublicEvents && now < cacheExpiry) {
+      const lim = options.limit || 50;
+      return cachedPublicEvents.slice(0, lim);
+    }
+
     const res = await this.list({
       ...options,
       status: "Published",
     });
+
+    if (isUnfiltered) {
+      cachedPublicEvents = res.events;
+      cacheExpiry = now + 60000;
+    }
+
     return res.events;
   },
 
@@ -252,6 +280,7 @@ export const eventsDb = {
    * Updates an existing event
    */
   async update(id: string, updates: UpdateEventParams): Promise<MunicipalEvent> {
+    invalidateEventsCache();
     await ensurePostgresTables();
     const pool = getPool();
 
@@ -343,6 +372,7 @@ export const eventsDb = {
    * Deletes an event
    */
   async delete(id: string): Promise<boolean> {
+    invalidateEventsCache();
     await ensurePostgresTables();
     const pool = getPool();
     const res = await pool.query("DELETE FROM events WHERE id = $1;", [id.trim()]);

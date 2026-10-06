@@ -186,13 +186,20 @@ export async function POST(req: NextRequest) {
       issuedByDepartment: authority.department,
     });
 
-    // 8. If published, notify authorities
+    // 8. If published, notify citizens and authorities via email and SSE broadcast
     if (notice.status === "Published") {
       await notificationService.notifyNoticePublished(
         notice.id,
         notice.title,
         notice.category,
-        authority.fullName
+        authority.fullName,
+        {
+          description: notice.description,
+          isEmergency: notice.isEmergency,
+          severity: notice.priority,
+          targetWards: notice.targetWards || undefined,
+          department: authority.department,
+        }
       );
     }
 
