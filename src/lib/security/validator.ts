@@ -182,3 +182,112 @@ export function stripSensitiveSecrets<T extends Record<string, any>>(obj: T): Pa
 
   return clean as Partial<T>;
 }
+
+/**
+ * Detects whether a string contains sequential number series of 3 or more digits
+ * (e.g. 123, 1234, 234, 789, 321, 4321, 111, 222, etc.)
+ */
+export function hasSequentialNumberSeries(password: string): boolean {
+  if (!password || password.length < 3) return false;
+
+  for (let i = 0; i < password.length - 2; i++) {
+    const c1 = password.charCodeAt(i);
+    const c2 = password.charCodeAt(i + 1);
+    const c3 = password.charCodeAt(i + 2);
+
+    // Check if all 3 characters are ASCII digits '0'-'9' (48 to 57)
+    if (c1 >= 48 && c1 <= 57 && c2 >= 48 && c2 <= 57 && c3 >= 48 && c3 <= 57) {
+      // Ascending series: e.g. 123, 234, 789, 012
+      if (c2 === c1 + 1 && c3 === c2 + 1) {
+        return true;
+      }
+      // Descending series: e.g. 321, 432, 987, 210
+      if (c2 === c1 - 1 && c3 === c2 - 1) {
+        return true;
+      }
+      // Repeated digits series: e.g. 111, 222, 000
+      if (c1 === c2 && c2 === c3) {
+        return true;
+      }
+      // Circular wrap ascending: 890, 901
+      if ((c1 === 56 && c2 === 57 && c3 === 48) || (c1 === 57 && c2 === 48 && c3 === 49)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+export interface PasswordValidationRules {
+  minLength: boolean;
+  hasUppercase: boolean;
+  hasLowercase: boolean;
+  hasNumber: boolean;
+  hasSpecial: boolean;
+  noSeriesNumber: boolean;
+}
+
+export interface StrongPasswordResult {
+  isValid: boolean;
+  score: number;
+  errors: string[];
+  rules: PasswordValidationRules;
+}
+
+/**
+ * Validates a password against strong security standards:
+ * - Minimum 8 characters
+ * - At least one uppercase letter (A-Z)
+ * - At least one lowercase letter (a-z)
+ * - At least one number (0-9)
+ * - At least one special character (!@#$%^&* etc.)
+ * - No sequential numbers / series (e.g., 123, 1234, 321, 111)
+ */
+export function validateStrongPassword(password: unknown): StrongPasswordResult {
+  const str = typeof password === "string" ? password : "";
+  const errors: string[] = [];
+
+  const minLength = str.length >= 8;
+  const hasUppercase = /[A-Z]/.test(str);
+  const hasLowercase = /[a-z]/.test(str);
+  const hasNumber = /[0-9]/.test(str);
+  const hasSpecial = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?~`]/.test(str);
+  const hasSeries = hasSequentialNumberSeries(str);
+  const noSeriesNumber = !hasSeries;
+
+  if (!minLength) {
+    errors.push("Password must be at least 8 characters long.");
+  }
+  if (!hasUppercase) {
+    errors.push("Password must contain at least one uppercase letter (A-Z).");
+  }
+  if (!hasLowercase) {
+    errors.push("Password must contain at least one lowercase letter (a-z).");
+  }
+  if (!hasNumber) {
+    errors.push("Password must contain at least one number (0-9).");
+  }
+  if (!hasSpecial) {
+    errors.push("Password must contain at least one special character (!@#$%^&* etc.).");
+  }
+  if (!noSeriesNumber) {
+    errors.push("Password cannot contain sequential numbers (such as 123, 1234, or 321).");
+  }
+
+  const passedCount = [minLength, hasUppercase, hasLowercase, hasNumber, hasSpecial, noSeriesNumber].filter(Boolean).length;
+
+  return {
+    isValid: errors.length === 0,
+    score: passedCount,
+    errors,
+    rules: {
+      minLength,
+      hasUppercase,
+      hasLowercase,
+      hasNumber,
+      hasSpecial,
+      noSeriesNumber,
+    },
+  };
+}

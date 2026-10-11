@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { citizenDb, isPostgresConfigured } from "@/lib/db/postgres";
 import { authService, toSafeCitizen } from "@/lib/services/authService";
 import { otpService } from "@/lib/services/otpService";
+import { validateStrongPassword } from "@/lib/security/validator";
 
 export const dynamic = "force-dynamic";
 
@@ -66,9 +67,10 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Validate Password & Confirmation
-    if (password.length < 8) {
+    const passwordValidation = validateStrongPassword(password);
+    if (!passwordValidation.isValid) {
       return NextResponse.json(
-        { success: false, error: "Password must be at least 8 characters long." },
+        { success: false, error: passwordValidation.errors[0] },
         { status: 400 }
       );
     }

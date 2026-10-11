@@ -155,7 +155,7 @@ function AdminLoginContent() {
           <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
             <div>
               <label htmlFor="admin-identifier" className="block text-xs font-bold uppercase tracking-wider text-teal-200 mb-1.5">
-                Username or Official Email
+                Username
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-teal-400">
@@ -167,7 +167,7 @@ function AdminLoginContent() {
                   type="text"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="admin or admin@lakshmeshwar-tmc.gov.in"
+                  placeholder="admin"
                   autoComplete="username"
                   required
                   autoFocus
@@ -178,9 +178,17 @@ function AdminLoginContent() {
             </div>
 
             <div>
-              <label htmlFor="admin-password" className="block text-xs font-bold uppercase tracking-wider text-teal-200 mb-1.5">
-                Administrative Password
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="admin-password" className="block text-xs font-bold uppercase tracking-wider text-teal-200">
+                  Administrative Password
+                </label>
+                <Link
+                  href="/admin/forgot-password"
+                  className="text-xs text-amber-400 hover:text-amber-300 font-semibold underline underline-offset-2 transition"
+                >
+                  Forgot Password?
+                </Link>
+              </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-teal-400">
                   <Lock className="w-4 h-4" />

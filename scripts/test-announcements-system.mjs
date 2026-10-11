@@ -66,7 +66,7 @@ async function run() {
   const loginRes = await fetch(`${BASE_URL}/api/admin/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ usernameOrEmail: "admin", password: "Admin@Pass2026" }),
+    body: JSON.stringify({ usernameOrEmail: "admin", password: process.env.INITIAL_ADMIN_PASSWORD || "Admin@123" }),
   });
   assert(loginRes.status === 200, "Admin login returns HTTP 200");
   const cookie = loginRes.headers.get("set-cookie") || "";

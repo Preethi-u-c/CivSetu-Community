@@ -4,6 +4,7 @@ import { adminAuthoritiesDb } from "@/lib/db/admin";
 import { auditDb } from "@/lib/db/audit";
 import { getPool } from "@/lib/db/postgres";
 import { toSafeAuthorityUser } from "@/lib/db/authority";
+import { validateStrongPassword } from "@/lib/security/validator";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,16 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
     const { id } = params;
     const body = await req.json().catch(() => ({}));
+
+    if (body.password) {
+      const passwordValidation = validateStrongPassword(body.password);
+      if (!passwordValidation.isValid) {
+        return NextResponse.json(
+          { success: false, error: passwordValidation.errors[0] },
+          { status: 400 }
+        );
+      }
+    }
     
     const updated = await adminAuthoritiesDb.updateAuthority(id, body);
     if (!updated) {

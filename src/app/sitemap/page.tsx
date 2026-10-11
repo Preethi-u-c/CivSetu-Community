@@ -24,7 +24,8 @@ export default function SitemapPage() {
         { label: "Applications & Forms", href: "/applications" },
         { label: "Track Application / Grievance Status", href: "/track" },
         { label: "City Demographics & Summary", href: "/city-summary" },
-        { label: "Municipal Administration Desk", href: "/admin" },
+        { label: "Municipal Administration Desk", href: "/admin/login" },
+        { label: "Admin Password Recovery", href: "/admin/forgot-password" },
       ],
     },
     {

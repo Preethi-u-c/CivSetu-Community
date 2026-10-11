@@ -85,7 +85,12 @@ export const adminDb = {
     const pool = getPool();
     const clean = identifier.trim();
     const res = await pool.query(
-      "SELECT * FROM admin_users WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($1) OR id = $1 LIMIT 1;",
+      `SELECT * FROM admin_users 
+       WHERE LOWER(username) = LOWER($1) 
+          OR LOWER(email) = LOWER($1) 
+          OR id = $1 
+          OR (LOWER($1) = 'admin' AND LOWER(email) = 'civsetu73@gmail.com')
+       LIMIT 1;`,
       [clean]
     );
     return res.rows.length > 0 ? mapAdminRow(res.rows[0]) : null;
@@ -473,7 +478,7 @@ export const adminAuthoritiesDb = {
     const pool = getPool();
     const bcrypt = await import("bcryptjs");
 
-    const hash = await bcrypt.hash(data.password || "CivSetu@123", 10);
+    const hash = await bcrypt.hash(data.password || "CivSetu@Pass2026", 10);
     const id = `OFF-LMC-${Math.floor(100 + Math.random() * 900)}`;
 
     const sql = `

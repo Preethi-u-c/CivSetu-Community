@@ -18,7 +18,11 @@ import {
   Plus,
   Edit2,
   Trash2,
+  Lock,
+  Check,
+  X,
 } from "lucide-react";
+import { validateStrongPassword } from "@/lib/security/validator";
 
 interface AuthorityOfficer {
   id: string;
@@ -184,9 +188,17 @@ export default function AdminAuthoritiesPage() {
       return;
     }
 
-    if (!editOfficer && (!formData.password || formData.password.length < 8)) {
-      setFormError("Password must be at least 8 characters.");
+    if (!editOfficer && !formData.password) {
+      setFormError("Password is required for new authority officers.");
       return;
+    }
+
+    if (formData.password) {
+      const passwordVal = validateStrongPassword(formData.password);
+      if (!passwordVal.isValid) {
+        setFormError(passwordVal.errors[0]);
+        return;
+      }
     }
 
     if (formData.password && formData.password !== formData.confirmPassword) {
@@ -574,8 +586,7 @@ export default function AdminAuthoritiesPage() {
                       type="password" 
                       value={formData.password}
                       onChange={(e) => setFormData({...formData, password: e.target.value})}
-                      placeholder={editOfficer ? "Leave blank to keep unchanged" : "Min. 8 characters"}
-                      minLength={editOfficer && !formData.password ? undefined : 8}
+                      placeholder={editOfficer ? "Leave blank to keep unchanged" : "Min. 8 characters (Strong)"}
                       className="w-full px-3 py-2 bg-white dark:bg-[#041211] border border-gray-300 dark:border-teal-800 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 dark:text-white" 
                     />
                   </div>
@@ -589,11 +600,50 @@ export default function AdminAuthoritiesPage() {
                       value={formData.confirmPassword}
                       onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
                       placeholder="Re-enter password"
-                      minLength={editOfficer && !formData.password ? undefined : 8}
                       className="w-full px-3 py-2 bg-white dark:bg-[#041211] border border-gray-300 dark:border-teal-800 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 dark:text-white" 
                     />
                   </div>
                 </div>
+
+                {formData.password && (() => {
+                  const val = validateStrongPassword(formData.password);
+                  return (
+                    <div className="p-3 bg-gray-50 dark:bg-[#031514] border border-gray-200 dark:border-teal-900 rounded-xl space-y-2 text-xs">
+                      <div className="flex items-center justify-between font-semibold">
+                        <span className="text-gray-700 dark:text-teal-300">Password Strength:</span>
+                        <span className={val.score === 6 ? "text-emerald-600 dark:text-emerald-400" : val.score >= 4 ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"}>
+                          {val.score === 6 ? "Strong" : val.score >= 4 ? "Medium" : "Weak"} ({val.score}/6)
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-teal-950 rounded-full h-1.5 overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-300 ${val.score === 6 ? "bg-emerald-500" : val.score >= 4 ? "bg-amber-500" : "bg-rose-500"}`}
+                          style={{ width: `${(val.score / 6) * 100}%` }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5 text-[11px] pt-1">
+                        <div className={`flex items-center gap-1 ${val.rules.minLength ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-teal-700"}`}>
+                          {val.rules.minLength ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} 8+ Characters
+                        </div>
+                        <div className={`flex items-center gap-1 ${val.rules.hasUppercase ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-teal-700"}`}>
+                          {val.rules.hasUppercase ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} Uppercase (A-Z)
+                        </div>
+                        <div className={`flex items-center gap-1 ${val.rules.hasLowercase ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-teal-700"}`}>
+                          {val.rules.hasLowercase ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} Lowercase (a-z)
+                        </div>
+                        <div className={`flex items-center gap-1 ${val.rules.hasNumber ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-teal-700"}`}>
+                          {val.rules.hasNumber ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} Number (0-9)
+                        </div>
+                        <div className={`flex items-center gap-1 ${val.rules.hasSpecial ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-teal-700"}`}>
+                          {val.rules.hasSpecial ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} Special character
+                        </div>
+                        <div className={`flex items-center gap-1 ${val.rules.noSeriesNumber ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400 font-semibold"}`}>
+                          {val.rules.noSeriesNumber ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />} No series numbers (123, 1234)
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </form>
             </div>
             

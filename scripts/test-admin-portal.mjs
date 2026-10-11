@@ -68,7 +68,7 @@ if (fs.existsSync(envLocalPath)) {
 }
 
 // Configurable development admin password for test execution
-const activeAdminPassword = adminTestPassword || process.env.INITIAL_ADMIN_PASSWORD || "CivSetuDevAdmin2026!";
+const activeAdminPassword = adminTestPassword || process.env.INITIAL_ADMIN_PASSWORD || "Admin@123";
 
 let passedTests = 0;
 let failedTests = 0;

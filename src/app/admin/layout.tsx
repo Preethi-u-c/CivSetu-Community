@@ -47,10 +47,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const isLoginPage = pathname === "/admin/login";
+  const isAuthPage = pathname === "/admin/login" || pathname === "/admin/forgot-password";
 
   useEffect(() => {
-    if (isLoginPage) {
+    if (isAuthPage) {
       setLoading(false);
       return;
     }
@@ -88,7 +88,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => {
       isMounted = false;
     };
-  }, [pathname, isLoginPage, router]);
+  }, [pathname, isAuthPage, router]);
 
   const handleLogout = async (reason?: string) => {
     try {
@@ -102,7 +102,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { isWarning, remainingSeconds, dismissWarning } = useIdleTimeout({
     timeoutMinutes: 15,
     warningMinutes: 2,
-    enabled: !isLoginPage && !loading && !!admin,
+    enabled: !isAuthPage && !loading && !!admin,
     onLogout: () => handleLogout("idle"),
   });
 
@@ -111,7 +111,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     setMobileMenuOpen(false);
   }, [pathname]);
 
-  if (isLoginPage) {
+  if (isAuthPage) {
     return <>{children}</>;
   }
 

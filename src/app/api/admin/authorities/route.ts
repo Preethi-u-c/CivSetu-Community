@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminService } from "@/lib/services/adminService";
 import { adminAuthoritiesDb } from "@/lib/db/admin";
 import { auditDb } from "@/lib/db/audit";
+import { validateStrongPassword } from "@/lib/security/validator";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,14 @@ export async function POST(req: NextRequest) {
     if (!fullName || !designation || !department || !authorityLevel || !email || !password) {
       return NextResponse.json(
         { success: false, error: "All required fields must be provided." },
+        { status: 400 }
+      );
+    }
+
+    const passwordValidation = validateStrongPassword(password);
+    if (!passwordValidation.isValid) {
+      return NextResponse.json(
+        { success: false, error: passwordValidation.errors[0] },
         { status: 400 }
       );
     }

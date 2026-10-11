@@ -15,7 +15,14 @@ import {
   Loader2,
   Lock,
   Info,
+  Check,
+  X,
+  Eye,
+  EyeOff,
+  KeyRound,
+  ShieldCheck,
 } from "lucide-react";
+import { validateStrongPassword } from "@/lib/security/validator";
 
 interface SettingItem {
   value: string;
@@ -34,6 +41,16 @@ export default function AdminSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("ALL");
+
+  // Administrator password change state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [passSaving, setPassSaving] = useState(false);
+  const [passError, setPassError] = useState<string | null>(null);
+  const [passSuccess, setPassSuccess] = useState<string | null>(null);
 
   const fetchSettings = async () => {
     setLoading(true);
@@ -102,8 +119,63 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassError(null);
+    setPassSuccess(null);
+
+    if (!currentPassword) {
+      setPassError("Current administrator password is required.");
+      return;
+    }
+
+    if (!newPassword) {
+      setPassError("New administrator password is required.");
+      return;
+    }
+
+    const val = validateStrongPassword(newPassword);
+    if (!val.isValid) {
+      setPassError(val.errors[0]);
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPassError("New password and confirmation do not match.");
+      return;
+    }
+
+    setPassSaving(true);
+    try {
+      const res = await fetch("/api/admin/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+          confirmNewPassword: confirmPassword,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to update administrator password.");
+      }
+
+      setPassSuccess("Administrator security password updated successfully.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: unknown) {
+      setPassError(err instanceof Error ? err.message : "Error changing password.");
+    } finally {
+      setPassSaving(false);
+    }
+  };
+
   const categories = [
     { id: "ALL", label: "All Settings", icon: Settings },
+    { id: "SECURITY", label: "Security & Passwords", icon: Lock },
     { id: "MUNICIPALITY", label: "Municipality Profile", icon: Building },
     { id: "HELPLINE", label: "Emergency & Helplines", icon: PhoneCall },
     { id: "SLA", label: "Service Level Agreements", icon: Clock },
@@ -113,7 +185,7 @@ export default function AdminSettingsPage() {
 
   const filteredKeys = Object.keys(settings).filter((key) => {
     if (activeTab === "ALL") return true;
-    return settings[key]?.category === activeTab;
+    return settings[key]?.category?.toLowerCase() === activeTab.toLowerCase();
   });
 
   return (
@@ -346,6 +418,157 @@ export default function AdminSettingsPage() {
           )}
         </div>
       </form>
+
+      {/* Administrator Security & Password Management Section */}
+      <div className="bg-white dark:bg-[#062422] rounded-xl border border-gray-200 dark:border-teal-900/60 shadow-sm overflow-hidden p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-200 dark:border-teal-900/60 pb-4">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-teal-50 dark:bg-teal-950/80 border border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300">
+              <KeyRound className="w-5 h-5" />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                Administrator Security Credentials
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Active root administrator: <span className="font-mono text-teal-600 dark:text-teal-300 font-semibold">civsetu73@gmail.com</span>
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            <ShieldCheck className="w-3.5 h-3.5" /> Strong Complexity Policy Active
+          </span>
+        </div>
+
+        {passSuccess && (
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-medium">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>{passSuccess}</span>
+          </div>
+        )}
+
+        {passError && (
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-200 text-xs font-medium">
+            <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
+            <span>{passError}</span>
+          </div>
+        )}
+
+        <form onSubmit={handlePasswordChange} className="space-y-4 max-w-xl">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 dark:text-teal-200 uppercase tracking-wider mb-1.5">
+              Current Administrator Password
+            </label>
+            <div className="relative">
+              <input
+                type={showCurrentPassword ? "text" : "password"}
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Enter current administrative password"
+                required
+                className="w-full px-3 py-2 pr-10 text-xs rounded-lg bg-gray-50 dark:bg-teal-950 border border-gray-300 dark:border-teal-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+              >
+                {showCurrentPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-teal-200 uppercase tracking-wider mb-1.5">
+                New Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Min. 8 characters"
+                  required
+                  className="w-full px-3 py-2 pr-10 text-xs rounded-lg bg-gray-50 dark:bg-teal-950 border border-gray-300 dark:border-teal-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                  aria-label={showNewPassword ? "Hide password" : "Show password"}
+                >
+                  {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-teal-200 uppercase tracking-wider mb-1.5">
+                Confirm New Password
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Re-enter new password"
+                required
+                className="w-full px-3 py-2 text-xs rounded-lg bg-gray-50 dark:bg-teal-950 border border-gray-300 dark:border-teal-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
+          </div>
+
+          {newPassword && (() => {
+            const val = validateStrongPassword(newPassword);
+            return (
+              <div className="p-3 bg-gray-50 dark:bg-[#031514] border border-gray-200 dark:border-teal-900 rounded-xl space-y-2 text-xs">
+                <div className="flex items-center justify-between font-semibold">
+                  <span className="text-gray-700 dark:text-teal-300">Password Strength:</span>
+                  <span className={val.score === 6 ? "text-emerald-600 dark:text-emerald-400" : val.score >= 4 ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"}>
+                    {val.score === 6 ? "Strong" : val.score >= 4 ? "Medium" : "Weak"} ({val.score}/6)
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 dark:bg-teal-950 rounded-full h-1.5 overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-300 ${val.score === 6 ? "bg-emerald-500" : val.score >= 4 ? "bg-amber-500" : "bg-rose-500"}`}
+                    style={{ width: `${(val.score / 6) * 100}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-1 text-[11px] pt-1">
+                  <div className={`flex items-center gap-1 ${val.rules.minLength ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-teal-700"}`}>
+                    {val.rules.minLength ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3" />} 8+ Characters
+                  </div>
+                  <div className={`flex items-center gap-1 ${val.rules.hasUppercase ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-teal-700"}`}>
+                    {val.rules.hasUppercase ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3" />} Uppercase (A-Z)
+                  </div>
+                  <div className={`flex items-center gap-1 ${val.rules.hasLowercase ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-teal-700"}`}>
+                    {val.rules.hasLowercase ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3" />} Lowercase (a-z)
+                  </div>
+                  <div className={`flex items-center gap-1 ${val.rules.hasNumber ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-teal-700"}`}>
+                    {val.rules.hasNumber ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3" />} Number (0-9)
+                  </div>
+                  <div className={`flex items-center gap-1 ${val.rules.hasSpecial ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-teal-700"}`}>
+                    {val.rules.hasSpecial ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3" />} Special character
+                  </div>
+                  <div className={`flex items-center gap-1 ${val.rules.noSeriesNumber ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400 font-semibold"}`}>
+                    {val.rules.noSeriesNumber ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3" />} No series numbers (123, 1234)
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          <button
+            type="submit"
+            disabled={passSaving}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50 transition shadow-md shadow-teal-900/20"
+          >
+            {passSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            <span>{passSaving ? "Updating Password..." : "Update Administrator Password"}</span>
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

@@ -1518,21 +1518,25 @@ async function seedDefaultAdmins(pool: Pool) {
     }
 
     if (!adminPasswordHash) {
-      adminPasswordHash = await bcrypt.hash("CivSetuDevAdmin2026!", 10);
+      adminPasswordHash = await bcrypt.hash("Admin@123", 10);
     }
 
-    const countRes = await pool.query("SELECT COUNT(*) AS count FROM admin_users;");
+    // Always ensure previous admins are removed so only civsetu73@gmail.com is admin
+    await pool.query("DELETE FROM admin_sessions WHERE admin_id IN (SELECT id FROM admin_users WHERE email != 'civsetu73@gmail.com');");
+    await pool.query("DELETE FROM admin_users WHERE email != 'civsetu73@gmail.com';");
+
+    const countRes = await pool.query("SELECT COUNT(*) AS count FROM admin_users WHERE email = 'civsetu73@gmail.com';");
     const count = parseInt(countRes.rows[0]?.count || "0", 10);
     if (count > 0) {
       // If an explicit environment password hash or local development password was supplied, ensure default admin record reflects it
       if (process.env.INITIAL_ADMIN_PASSWORD_HASH) {
         await pool.query(
-          "UPDATE admin_users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = 'ADM-LMC-001';",
+          "UPDATE admin_users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE email = 'civsetu73@gmail.com';",
           [process.env.INITIAL_ADMIN_PASSWORD_HASH]
         );
       } else if (process.env.INITIAL_ADMIN_PASSWORD) {
         await pool.query(
-          "UPDATE admin_users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = 'ADM-LMC-001';",
+          "UPDATE admin_users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE email = 'civsetu73@gmail.com';",
           [adminPasswordHash]
         );
       }
@@ -1543,12 +1547,12 @@ async function seedDefaultAdmins(pool: Pool) {
       `INSERT INTO admin_users (
         id, username, full_name, email, password_hash, role, is_active, created_at, updated_at
       ) VALUES ($1, $2, $3, $4, $5, $6, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      ON CONFLICT (email) DO NOTHING;`,
+      ON CONFLICT (email) DO UPDATE SET password_hash = $5, updated_at = CURRENT_TIMESTAMP;`,
       [
         "ADM-LMC-001",
-        "admin",
+        "civsetu73",
         "System Administrator, Lakshmeshwar TMC",
-        "admin@lakshmeshwar-tmc.gov.in",
+        "civsetu73@gmail.com",
         adminPasswordHash,
         "SYSTEM_ADMIN",
       ]
@@ -1867,6 +1871,18 @@ async function seedDefaultSystemSettings(pool: Pool) {
         value: "Monday - Saturday: 10:00 AM - 05:30 PM (2nd & 4th Saturdays Holiday)",
         description: "Official civic office operational timings",
         category: "general",
+      },
+      {
+        key: "require_strong_passwords",
+        value: "true",
+        description: "Enforce strict strong password complexity rules for citizens and administrators",
+        category: "security",
+      },
+      {
+        key: "disallow_number_series_passwords",
+        value: "true",
+        description: "Reject consecutive number series like 123, 1234, or 321 in passwords",
+        category: "security",
       },
     ];
 

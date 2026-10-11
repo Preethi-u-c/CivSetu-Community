@@ -15,7 +15,10 @@ import {
   ArrowLeft,
   ShieldAlert,
   RefreshCw,
+  Check,
+  X,
 } from "lucide-react";
+import { validateStrongPassword } from "@/lib/security/validator";
 
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
@@ -138,8 +141,11 @@ export default function ForgotPasswordPage() {
 
     if (!newPassword) {
       errs.newPassword = "New password is required.";
-    } else if (newPassword.length < 8) {
-      errs.newPassword = "New password must be at least 8 characters.";
+    } else {
+      const val = validateStrongPassword(newPassword);
+      if (!val.isValid) {
+        errs.newPassword = val.errors[0];
+      }
     }
 
     if (!confirmNewPassword) {
@@ -416,6 +422,46 @@ export default function ForgotPasswordPage() {
                   {passwordErrors.newPassword}
                 </p>
               )}
+
+              {newPassword && (() => {
+                const val = validateStrongPassword(newPassword);
+                return (
+                  <div className="mt-2.5 p-3 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700/60 rounded-lg space-y-2 text-xs">
+                    <div className="flex items-center justify-between font-semibold">
+                      <span className="text-gray-700 dark:text-gray-300">Password Strength:</span>
+                      <span className={val.score === 6 ? "text-emerald-600 dark:text-emerald-400 font-bold" : val.score >= 4 ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400 font-bold"}>
+                        {val.score === 6 ? "Strong" : val.score >= 4 ? "Moderate" : "Weak"} ({val.score}/6)
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-300 ${val.score === 6 ? "bg-emerald-500" : val.score >= 4 ? "bg-amber-500" : "bg-rose-500"}`}
+                        style={{ width: `${(val.score / 6) * 100}%` }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 text-[11px] pt-1">
+                      <div className={`flex items-center gap-1 ${val.rules.minLength ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"}`}>
+                        {val.rules.minLength ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3" />} 8+ Characters
+                      </div>
+                      <div className={`flex items-center gap-1 ${val.rules.hasUppercase ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"}`}>
+                        {val.rules.hasUppercase ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3" />} Uppercase (A-Z)
+                      </div>
+                      <div className={`flex items-center gap-1 ${val.rules.hasLowercase ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"}`}>
+                        {val.rules.hasLowercase ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3" />} Lowercase (a-z)
+                      </div>
+                      <div className={`flex items-center gap-1 ${val.rules.hasNumber ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"}`}>
+                        {val.rules.hasNumber ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3" />} Number (0-9)
+                      </div>
+                      <div className={`flex items-center gap-1 ${val.rules.hasSpecial ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"}`}>
+                        {val.rules.hasSpecial ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3" />} Special (!@#$)
+                      </div>
+                      <div className={`flex items-center gap-1 ${val.rules.noSeriesNumber ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400 font-semibold"}`}>
+                        {val.rules.noSeriesNumber ? <Check className="w-3 h-3 text-emerald-500" /> : <X className="w-3 h-3" />} No series (123, 1234)
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Confirm New Password */}

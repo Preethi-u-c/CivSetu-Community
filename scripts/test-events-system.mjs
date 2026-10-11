@@ -111,7 +111,7 @@ async function run() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       usernameOrEmail: "admin",
-      password: "Admin@Pass2026",
+      password: process.env.INITIAL_ADMIN_PASSWORD || "Admin@123",
     }),
   });
   assert(loginRes.status === 200, "Admin login with default credentials returns HTTP 200");
